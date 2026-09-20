@@ -1,0 +1,5 @@
+include LICENSE README.md CHANGELOG.md release.sh tests.sh
+include tools/repair_forgejo_alpha3.py
+recursive-include docs *.md
+recursive-include tests *.py
+include debian/changelog rpm/heckle.spec

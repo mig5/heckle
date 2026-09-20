@@ -1,0 +1,89 @@
+[build-system]
+requires = ["poetry-core>=1.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "heckle"
+version = "0.1.0"
+description = "Turn existing GitHub, GitLab, Gitea and Forgejo configuration into maintainable Terraform or OpenTofu"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Miguel Jacq", email = "mig@mig5.net" }]
+keywords = ["opentofu", "terraform", "hcl", "github", "gitlab", "gitea", "forgejo"]
+dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: System :: Systems Administration",
+]
+
+[project.urls]
+Homepage = "https://heckle.tf"
+Repository = "https://git.mig5.net/mig5/heckle"
+
+[project.scripts]
+heckle = "heckle.cli:main"
+
+[tool.poetry]
+# Compatibility metadata for distro poetry-core versions. [project] above is
+# the canonical metadata for modern Poetry.
+name = "heckle"
+version = "0.1.0"
+description = "Turn existing GitHub, GitLab, Gitea and Forgejo configuration into maintainable Terraform or OpenTofu"
+authors = ["Miguel Jacq <mig@mig5.net>"]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+homepage = "https://heckle.tf"
+repository = "https://git.mig5.net/mig5/heckle"
+packages = [{ include = "heckle", from = "src" }]
+include = [
+  { path = "tools/repair_forgejo_alpha3.py", format = ["sdist", "wheel"] },
+  { path = "tests", format = "sdist" },
+  { path = "CHANGELOG.md", format = "sdist" },
+  { path = "release.sh", format = "sdist" },
+  { path = "tests.sh", format = "sdist" },
+  { path = "debian/changelog", format = "sdist" },
+  { path = "rpm/heckle.spec", format = "sdist" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8,<9"
+pytest-cov = ">=5,<7"
+pyproject-appimage = ">=4.2,<5"
+
+[tool.poetry.scripts]
+heckle = "heckle.cli:main"
+
+[tool.pyproject-appimage]
+script = "heckle"
+output = "Heckle.AppImage"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-ra"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.coverage.run]
+branch = true
+source = ["heckle"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

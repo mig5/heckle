@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=debian:bookworm
+FROM ${BASE_IMAGE}
+ENV DEBIAN_FRONTEND=noninteractive
+RUN set -eux; . /etc/os-release; if [ "${ID:-}" = ubuntu ]; then apt-get update; apt-get install -y --no-install-recommends software-properties-common ca-certificates; add-apt-repository -y universe; fi
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential devscripts debhelper dh-python pybuild-plugin-pyproject python3-all python3-poetry-core python3-pytest rsync ca-certificates libdistro-info-perl && rm -rf /var/lib/apt/lists/*
+RUN cat > /usr/local/bin/build-deb <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+SRC=${SRC:-/src}; WORKROOT=${WORKROOT:-/work}; WORK=${WORKROOT}/src; OUT=${OUT:-/out}
+mkdir -p "$WORK" "$OUT"
+rsync -a --delete --exclude .git --exclude .venv --exclude dist --exclude build --exclude __pycache__ --exclude .pytest_cache "$SRC/" "$WORK/"
+cd "$WORK"
+if [ -n "${SUITE:-}" ]; then export DEBEMAIL="mig@mig5.net" DEBFULLNAME="Miguel Jacq"; dch --distribution "$SUITE" --local "~$SUITE" "Build for $SUITE"; fi
+dpkg-buildpackage -us -uc -b
+shopt -s nullglob
+cp -v "$WORKROOT"/*.deb "$WORKROOT"/*.changes "$WORKROOT"/*.buildinfo "$OUT/"
+EOF
+RUN chmod +x /usr/local/bin/build-deb
+WORKDIR /work
+ENTRYPOINT ["/usr/local/bin/build-deb"]

@@ -1,0 +1,22 @@
+Source: heckle
+Section: admin
+Priority: optional
+Maintainer: Miguel Jacq <mig@mig5.net>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ pybuild-plugin-pyproject,
+ python3-all (>= 3.11),
+ python3-poetry-core,
+ python3-pytest
+Standards-Version: 4.6.2
+
+Package: heckle
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3 (>= 3.11)
+Description: Generate modular Terraform or OpenTofu from existing software forges
+ Inventories GitHub organizations, GitLab groups, Gitea and Forgejo organizations
+ and generates standalone Terraform or OpenTofu configuration using native provider mappings.
+ Coverage is provider-specific. Terraform or OpenTofu is required for generation and validation
+ but not for inventory discovery or reading saved coverage reports.

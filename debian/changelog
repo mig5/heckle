@@ -1,0 +1,73 @@
+heckle (0.1.0-1) unstable; urgency=medium
+
+  * Provider compatibility and security audit release.
+
+ -- Miguel Jacq <mig@mig5.net>  Sun, 20 Sep 2026 15:30:00 +1000
+
+heckle (0.1.0~alpha13-1) unstable; urgency=medium
+
+  * Audit all GitLab 19.3.0 resource families managed by Heckle.
+  * Normalize provider-invalid empty values and coupled GitLab settings.
+  * Fix empty project/group membership expiry values.
+  * Improve retained-workdir plan diagnostics with the required init step.
+  * Use normal Terraform/OpenTofu graph concurrency during hydration and rehearsal.
+
+ -- Miguel Jacq <mig@mig5.net>  Sun, 20 Sep 2026 13:20:00 +1000
+
+heckle (0.1.0~alpha10-1) unstable; urgency=medium
+
+  * Support both Terraform and OpenTofu via --tf; OpenTofu remains the default.
+  * Keep generated adoption instructions aligned with the selected CLI.
+  * Rename provider-drift terminology to known provider behaviour.
+  * Make adoption reconciliation an explicit operator decision.
+
+ -- Miguel Jacq <mig@mig5.net>  Sun, 20 Sep 2026 10:00:00 +1000
+
+heckle (0.1.0~alpha8-1) unstable; urgency=medium
+
+  * Provider compatibility hardening and audited-pin registry.
+
+ -- Miguel Jacq <mig@mig5.net>  Sun, 20 Sep 2026 09:00:00 +1000
+
+heckle (0.1.0~alpha7-1) unstable; urgency=medium
+
+  * Recognise only provider behaviour guarded by a disabled parent feature.
+  * Keep state-only adoption and reject all unknown or effective live changes.
+
+ -- Miguel Jacq <mig@mig5.net>  Sun, 20 Sep 2026 08:30:00 +1000
+
+heckle (0.1.0~alpha6-1) unstable; urgency=medium
+
+  * Add safe state-only adoption fallback for provider import/default conflicts.
+  * Improve adoption diagnostics without exposing provider values.
+
+ -- Miguel Jacq <mig@mig5.net>  Sat, 19 Sep 2026 21:30:00 +1000
+
+heckle (0.1.0~alpha5-1) unstable; urgency=medium
+
+  * Presence-aware import rendering and no-change adoption safety gate.
+  * Poetry-based build and release workflow.
+
+ -- Miguel Jacq <mig@mig5.net>  Sat, 19 Sep 2026 20:30:00 +1000
+
+heckle (0.1.0~alpha4-1) unstable; urgency=medium
+
+  * Fix Forgejo repository import configuration and simplify its warnings.
+  * Add regression tests and a local-only repair for existing generated modules.
+
+ -- Miguel Jacq <mig@mig5.net>  Sat, 19 Sep 2026 18:00:00 +1000
+
+heckle (0.1.0~alpha3-1) unstable; urgency=medium
+
+  * Add personal namespaces for all four forges.
+  * Simplify tests, local signed builds and PyPI releases.
+
+ -- Miguel Jacq <mig@mig5.net>  Sat, 19 Sep 2026 17:00:00 +1000
+
+heckle (0.1.0~alpha2-1) unstable; urgency=medium
+
+  * Rename github-to-opentofu to Heckle.
+  * Add forge/provider handlers for GitHub, GitLab, Gitea and Forgejo.
+  * Report unsupported and non-importable resources explicitly.
+
+ -- Miguel Jacq <mig@mig5.net>  Sat, 19 Sep 2026 14:47:00 +1000

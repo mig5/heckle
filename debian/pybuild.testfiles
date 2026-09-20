@@ -1,0 +1,7 @@
+tests
+pyproject.toml
+tests.sh
+release.sh
+CHANGELOG.md
+debian/changelog
+rpm/heckle.spec
