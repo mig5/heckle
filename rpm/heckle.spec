@@ -1,4 +1,4 @@
-%{!?upstream_version:%global upstream_version 0.1.0}
+%{!?upstream_version:%global upstream_version 0.1.1}
 
 Name:           heckle
 Version:        %{upstream_version}
@@ -40,6 +40,9 @@ requirement for generation and validation, not inventory or coverage reporting.
 %{_bindir}/heckle
 
 %changelog
+* Mon Sep 21 2026 Miguel Jacq <mig@mig5.net> - 0.1.1-1
+- Remove 'validate' subcommand which didn't add much value.
+
 * Sun Sep 20 2026 Miguel Jacq <mig@mig5.net> - 0.1.0-1
 - Provider compatibility and security audit release.
 

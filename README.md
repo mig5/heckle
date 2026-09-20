@@ -32,7 +32,7 @@ remote systems, remains with the operator.
 ## Install this source release
 
 Requires Python 3.11 or newer. There are no runtime Python dependencies.
-OpenTofu or Terraform 1.8 or newer, below 2.0, is required for `generate` and `validate`. OpenTofu is the default.
+OpenTofu or Terraform 1.8 or newer, below 2.0, is required for `generate`. OpenTofu is the default.
 `inventory` and `coverage` do not need either CLI.
 
 ```sh
@@ -138,7 +138,6 @@ heckle coverage ./snapshot --json
 # Reuses discovery, but the provider still reads the live forge while hydrating.
 heckle generate gitlab --group example --from-inventory ./snapshot --out ./iac
 heckle coverage ./iac
-heckle validate ./iac
 ```
 
 `inventory` intentionally succeeds with a report of optional API gaps, so that

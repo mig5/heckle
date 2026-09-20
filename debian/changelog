@@ -1,3 +1,9 @@
+heckle (0.1.1-1) unstable; urgency=medium
+
+  * Remove 'validate' subcommand which didn't add much value
+
+ -- Miguel Jacq <mig@mig5.net>  Mon, 21 Sep 2026 08:09:00 +1000
+
 heckle (0.1.0-1) unstable; urgency=medium
 
   * Provider compatibility and security audit release.

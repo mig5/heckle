@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Remove `validate` subcommand which didn't add much value.
+
 ## 0.1.0
 
 - Build RPM source archives from a staged, correctly named source directory instead of relying on `tar --transform`, which is rejected by Fedora 43's tar invocation.

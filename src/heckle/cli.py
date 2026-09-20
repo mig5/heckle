@@ -13,7 +13,6 @@ from heckle.core.model import FORGES
 from heckle.compatibility import compatibility_summary, format_compatibility
 from heckle.core.registry import backend
 from heckle.errors import GenerationError, GitHubAPIError
-from heckle.opentofu import TfRunner
 from heckle.pipeline import Options, Pipeline
 from heckle.reporting import format_report, read_report
 
@@ -60,9 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
     coverage = commands.add_parser("coverage", help="Read a saved coverage report without network access")
     coverage.add_argument("path", type=Path)
     coverage.add_argument("--json", action="store_true")
-    validate = commands.add_parser("validate", help="Run init -backend=false and validate; never apply")
-    validate.add_argument("path", type=Path)
-    validate.add_argument("--tf", help="Terraform or OpenTofu executable; defaults to HECKLE_TF_BIN, then tofu")
     compatibility = commands.add_parser("compatibility", help="Show audited provider pins and known upstream quirks")
     compatibility.add_argument("forge", nargs="?", choices=FORGES)
     compatibility.add_argument("--json", action="store_true")
@@ -75,14 +71,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "coverage":
             report = read_report(args.path)
             print(json.dumps(report, indent=2, sort_keys=True) if args.json else format_report(report))
-            return 0
-        if args.command == "validate":
-            root = args.path.expanduser().resolve()
-            if not root.is_dir():
-                raise GenerationError("Project directory does not exist")
-            runner = TfRunner(args.tf)
-            runner.validate(root)
-            print(f"{runner.tool_name} validation passed; no resources were applied.")
             return 0
         if args.command == "compatibility":
             names = [args.forge] if args.forge else list(FORGES)
