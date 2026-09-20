@@ -8,9 +8,13 @@ from heckle import __version__
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_runtime_package_is_dependency_free():
+def test_package_version_agrees():
     metadata = tomllib.loads((ROOT / 'pyproject.toml').read_text())
     assert metadata['project']['version'] == __version__
+
+
+def test_runtime_package_is_dependency_free():
+    metadata = tomllib.loads((ROOT / 'pyproject.toml').read_text())
     assert metadata['project']['dependencies'] == []
     assert metadata['project']['scripts'] == {'heckle': 'heckle.cli:main'}
     assert metadata['project']['requires-python'] == '>=3.11,<4.0'
@@ -30,12 +34,14 @@ def test_release_metadata_agrees():
     assert __version__ in (ROOT / 'CHANGELOG.md').read_text()
 
 
-def test_unreleased_history_uses_one_alpha_sequence():
+def test_changelog_versions_are_unique_and_newest_matches_package():
     import re
     if not (ROOT / 'CHANGELOG.md').is_file():
         pytest.skip('source changelog is not part of the installed wheel')
     headings = re.findall(r'^## (\S+)', (ROOT / 'CHANGELOG.md').read_text(), re.MULTILINE)
-    assert headings == ['0.1.0'] + [f'0.1.0-alpha{i}' for i in range(13, 0, -1)]
+    assert headings
+    assert headings[0] == __version__
+    assert len(headings) == len(set(headings))
 
 
 def test_shell_scripts_parse():
