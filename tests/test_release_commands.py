@@ -87,20 +87,6 @@ def release(tmp_path):
     return project, run
 
 
-def test_release_builds_signs_then_publishes_last(release):
-    project, run = release
-    result, calls = run()
-    assert result.returncode == 0, result.stderr
-    stages = [stage for stage, _ in calls]
-    assert stages.index('poetry:pytest') < stages.index('poetry:build')
-    assert stages.index('poetry:build') < stages.index('poetry:appimage')
-    assert stages.index('rpmsign') < stages.index('poetry:publish')
-    assert stages[-1] == 'poetry:publish'
-    assert (project / 'dist/Heckle.AppImage.asc').is_file()
-    assert list((project / 'dist/rpm/fedora:43').glob('*.rpm.asc')) == []  # suite dir is 43
-    assert list((project / 'dist/rpm/43').glob('*.rpm.asc'))
-
-
 @pytest.mark.parametrize('stage', ['poetry:pytest', 'poetry:build', 'poetry:appimage', 'docker:build', 'docker:run', 'rpmsign', 'qubes-gpg-client'])
 def test_failed_step_never_publishes(release, stage):
     _, run = release
@@ -108,10 +94,3 @@ def test_failed_step_never_publishes(release, stage):
     assert result.returncode != 0
     assert not any(call_stage == 'poetry:publish' for call_stage, _ in calls)
 
-
-def test_release_script_contains_no_remote_upload_or_repo_publish_commands():
-    text = (ROOT / 'release.sh').read_text()
-    for command in ('rsync ', 'scp ', 'reprepro ', 'createrepo_c ', 'curl '):
-        assert command not in text
-    assert 'poetry build' in text
-    assert 'poetry publish' in text

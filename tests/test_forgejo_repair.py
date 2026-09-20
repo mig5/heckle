@@ -10,6 +10,11 @@ from heckle.hcl.render import emit_config_fields
 from test_forgejo_repository import compile_repositories
 
 TOOL_PATH = Path(__file__).resolve().parents[1] / "tools/repair_forgejo_alpha3.py"
+if not TOOL_PATH.is_file():
+    pytest.skip(
+        "the optional alpha3 repair utility is not part of the installed wheel",
+        allow_module_level=True,
+    )
 spec = importlib.util.spec_from_file_location("repair_forgejo_alpha3", TOOL_PATH)
 repair = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(repair)

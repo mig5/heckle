@@ -47,7 +47,7 @@ homepage = "https://heckle.tf"
 repository = "https://git.mig5.net/mig5/heckle"
 packages = [{ include = "heckle", from = "src" }]
 include = [
-  { path = "tools/repair_forgejo_alpha3.py", format = ["sdist", "wheel"] },
+  { path = "tools/repair_forgejo_alpha3.py", format = "sdist" },
   { path = "tests", format = "sdist" },
   { path = "CHANGELOG.md", format = "sdist" },
   { path = "release.sh", format = "sdist" },

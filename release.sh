@@ -40,32 +40,51 @@ for dist in "${DISTS[@]}"; do
     -v "$PWD":/src \
     -v "$PWD/dist/${release}":/out \
     "heckle-deb:${release}"
-  for file in "dist/${release}"/*.deb; do
-    [ -f "$file" ] || continue
-    qubes-gpg-client --batch --armor --detach-sign "$file" > "$file.asc"
-  done
+  debfile=$(ls -1 dist/${release}/*.deb)
+  reprepro -b /home/user/git/repo includedeb "${release}" "${debfile}"
 done
 
 # RPM packages. rpmsign signs the RPM itself; detached signatures are useful for
 # release/download verification too. Uploading/updating yum repositories is separate.
-RPM_DISTS=(fedora:43)
+sudo apt-get -y install createrepo-c rpm
+RPM_DISTS=(
+  fedora:43
+)
+KEYID="54A91143AE0AB4F7743B01FE888ED1B423A3BC99"
+REPO_ROOT="${HOME}/git/repo_rpm"
+REMOTE="ashpool.mig5.net:/opt/repo_rpm"
+BUILD_OUTPUT="${HOME}/git/heckle/dist"
 mkdir -p dist/rpm
 for dist in "${RPM_DISTS[@]}"; do
-  release=${dist#*:}
-  out="dist/rpm/${release}"
-  mkdir -p "$out"
+  release=$(echo ${dist} | cut -d: -f2)
+  REPO_RELEASE_ROOT="${REPO_ROOT}/${release}"
+  RPM_REPO="${REPO_RELEASE_ROOT}/rpm/x86_64"
+  mkdir -p "$RPM_REPO"
   docker build -f Dockerfile.rpmbuild -t "heckle-rpm:${release}" \
     --no-cache --progress=plain --build-arg BASE_IMAGE="$dist" .
-  docker run --rm -v "$PWD":/src -v "$PWD/$out":/out "heckle-rpm:${release}"
-  sudo chown -R "${USER}" "$out"
-  for file in "$out"/*.rpm; do
-    [ -f "$file" ] || continue
-    rpmsign --addsign "$file"
-    qubes-gpg-client --batch --armor --detach-sign "$file" > "$file.asc"
+
+  rm -rf "$PWD/dist/rpm"/*
+  mkdir -p "$PWD/dist/rpm"
+
+  docker run --rm -v "$PWD":/src -v "$PWD/dist/rpm":/out "heckle-rpm:${release}"
+  sudo chown -R "${USER}" "$PWD/dist"
+
+  for file in `ls -1 "${BUILD_OUTPUT}/rpm"`; do
+    rpmsign --addsign "${BUILD_OUTPUT}/rpm/$file"
   done
+
+  cp "${BUILD_OUTPUT}/rpm/"*.rpm "$RPM_REPO/"
+
+  createrepo_c "$RPM_REPO"
+
+  echo "==> Signing repomd.xml..."
+  qubes-gpg-client --local-user "$KEYID" --detach-sign --armor "$RPM_REPO/repodata/repomd.xml" > "$RPM_REPO/repodata/repomd.xml.asc"  
 done
 
 # If every local artifact built and signed successfully, publish Python artifacts.
 poetry publish
 
-echo "Done. Package/repository uploads and Forgejo release creation are intentionally separate."
+echo "==> Syncing rpm repo to server..."
+rsync -aHPvz --exclude=.git --delete "$REPO_ROOT/" "$REMOTE/"
+
+echo "Done."

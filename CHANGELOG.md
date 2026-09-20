@@ -4,7 +4,7 @@
 
 - Build RPM source archives from a staged, correctly named source directory instead of relying on `tar --transform`, which is rejected by Fedora 43's tar invocation.
 - Make release tests wheel-build-aware under Debian pybuild, invoke `tests.sh` through Bash instead of relying on an executable bit preserved by wheel unpacking, and install Debian suite-name metadata in the package builder.
-- Include the alpha3 Forgejo repair utility in Python source and wheel distributions so Debian pybuild can collect and run its regression tests from the isolated build tree.
+- Keep the alpha3 Forgejo repair utility in source distributions, but out of installed wheels and system packages; installed-wheel test runs skip its source-only regression module.
 - Remove the unreleased `--tofu` and `OPENTOFU_BIN` compatibility aliases; use `--tf` and `HECKLE_TF_BIN`.
 - Complete a source-level compatibility audit of all resource families Heckle manages with `integrations/github` 6.13.0 and `go-gitea/gitea` 0.8.1, plus follow-up passes over `svalabs/forgejo` 1.6.0 and `gitlabhq/gitlab` 19.3.0.
 - Record the audited resource scope for all four providers and test the native Gitea/Forgejo scope against explicit adapter contracts, preventing future resource-family additions from silently bypassing compatibility review.

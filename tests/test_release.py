@@ -16,7 +16,7 @@ def test_runtime_package_is_dependency_free():
     assert metadata['project']['requires-python'] == '>=3.11,<4.0'
     assert {
         'path': 'tools/repair_forgejo_alpha3.py',
-        'format': ['sdist', 'wheel'],
+        'format': 'sdist',
     } in metadata['tool']['poetry']['include']
     assert {'path': 'tests', 'format': 'sdist'} in metadata['tool']['poetry']['include']
 
