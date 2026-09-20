@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "heckle"
-version = "0.1.0"
+version = "0.1.1"
 description = "Turn existing GitHub, GitLab, Gitea and Forgejo configuration into maintainable Terraform or OpenTofu"
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
@@ -38,7 +38,7 @@ heckle = "heckle.cli:main"
 # Compatibility metadata for distro poetry-core versions. [project] above is
 # the canonical metadata for modern Poetry.
 name = "heckle"
-version = "0.1.0"
+version = "0.1.1"
 description = "Turn existing GitHub, GitLab, Gitea and Forgejo configuration into maintainable Terraform or OpenTofu"
 authors = ["Miguel Jacq <mig@mig5.net>"]
 readme = "README.md"
