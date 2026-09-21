@@ -68,8 +68,13 @@ def test_github_audit_scope_covers_every_planned_resource_family():
 def test_gitea_create_destroy_and_parent_controlled_fields_are_recorded():
     spec = provider_spec("gitea")
     assert "repo_admin_change_team_access" in unmanaged_attributes(spec, "gitea_org")
-    assert "archive_on_destroy" in unmanaged_attributes(spec, "gitea_repository")
-    assert any(q.id == "gitea-team-all-repositories" for q in __import__("heckle.compatibility", fromlist=["quirks_for"]).quirks_for(spec, "gitea_team"))
+    assert {
+        "archive_on_destroy", "allow_manual_merge", "autodetect_manual_merge",
+    } <= unmanaged_attributes(spec, "gitea_repository")
+    assert any(
+        q.id == "gitea-team-import-update-unsafe" and q.kind == "warning"
+        for q in __import__("heckle.compatibility", fromlist=["quirks_for"]).quirks_for(spec, "gitea_team")
+    )
 
 def test_unaudited_provider_override_requires_explicit_opt_in(tmp_path):
     with pytest.raises(GenerationError, match="has not been audited"):

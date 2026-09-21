@@ -17,12 +17,13 @@ class GiteaProvider(GiteaHandlers, NativeProvider):
     spec = provider_spec("gitea")
     MANAGED_RESOURCE_TYPES = frozenset({
         "gitea_org", "gitea_repository", "gitea_repository_webhook",
-        "gitea_team", "gitea_team_members",
+        "gitea_team_members",
     })
-    HANDLERS = {"organization": "organization", "repository": "repository", "team": "team", "repository_webhook": "webhook", "team_members": "team_members"}
+    HANDLERS = {"organization": "organization", "repository": "repository", "repository_webhook": "webhook", "team_members": "team_members"}
     UNSUPPORTED = {
+        "team": ("inventory_only", "go-gitea/gitea 0.8.1 cannot safely update imported modern or owner teams"),
         "team_member": ("inventory_only", "Covered by the team's authoritative gitea_team_members resource when discovery is complete"),
-        "team_repository": ("inventory_only", "Covered by the repositories attribute on gitea_team when discovery is complete"),
+        "team_repository": ("inventory_only", "Team repository grants cannot be managed safely because gitea_team is inventory-only"),
         "organization_member": ("inventory_only", "Organization membership is not a separately verified import contract"),
         "repository_variable": ("inventory_only", "Variable values are deliberately redacted"),
         "organization_variable": ("inventory_only", "Variable values are deliberately redacted"),

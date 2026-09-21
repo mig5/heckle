@@ -66,5 +66,9 @@ def test_team_completeness_preserves_unreadable_grants(forge, tmp_path):
     plan = backend(forge).provider().plan(model, tmp_path)
     assert not any(c.resource_type == "gitea_team_members" for c in plan.candidates)
     if forge == "gitea":
-        assert "repositories" in next(c for c in plan.candidates if c.resource_type == "gitea_team").ignore_attributes
+        assert not any(c.resource_type == "gitea_team" for c in plan.candidates)
+        assert any(
+            item.key == team.key and item.status == "inventory_only"
+            for item in plan.coverage.items
+        )
     assert any(o.status == "permission_denied" for o in model.observations)

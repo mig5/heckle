@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+* Leave Gitea repository `allow_manual_merge` and `autodetect_manual_merge` settings unmanaged under `go-gitea/gitea` 0.8.1 because imported state does not reliably populate them and provider defaults otherwise produce unsafe adoption updates.
+* Treat Gitea team definitions, unit permissions and team repository grants as inventory-only because provider 0.8.1 loses imported `units_map` values, produces unstable `units` representations and cannot safely update imported granular or owner teams.
+* Continue managing authoritative Gitea team membership lists when discovery is complete, using the existing numeric team ID without depending on an unsafe managed `gitea_team` resource.
+* Add regression coverage ensuring unsafe Gitea teams are excluded, team memberships retain literal team IDs, and the affected repository settings remain unmanaged.
+
 ## 0.1.1
 
 - Remove `validate` subcommand which didn't add much value.

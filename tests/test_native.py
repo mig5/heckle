@@ -31,6 +31,37 @@ def test_gitlab_label_uses_numeric_id(tmp_path):
     assert "project" in member.references and "project_id" not in member.references
 
 
+def test_gitea_teams_are_inventory_only_but_complete_memberships_use_literal_team_id(tmp_path):
+    provider = backend("gitea").provider()
+    model = model_for("gitea")
+    plan = provider.plan(model, tmp_path)
+
+    assert not any(candidate.resource_type == "gitea_team" for candidate in plan.candidates)
+    members = next(
+        candidate for candidate in plan.candidates
+        if candidate.resource_type == "gitea_team_members"
+    )
+    assert members.import_id == "2"
+    assert any(
+        item.key == "example/platform" and item.status == "inventory_only"
+        for item in plan.coverage.items
+    )
+
+    resources, schema = FakeRunner().hydrate(provider, plan, tmp_path / "hydrate-gitea-team")
+    project = provider.compile(plan, resources, schema)
+    compiled = next(
+        item for item in project.resources
+        if item.candidate.resource_type == "gitea_team_members"
+    )
+    assert compiled.body.attributes["team_id"] == "2"
+    assert not compiled.body.attributes["team_id"].startswith("module.")
+
+    output = tmp_path / "gitea-output"
+    provider.render(project, output, prevent_destroy=True, split_teams=False)
+    assert not (output / "modules/gitea_team").exists()
+    assert (output / "modules/gitea_team_members").is_dir()
+
+
 def test_schema_removes_computed_only_and_rejects_unknown():
     schema = ProviderSchema("example/provider", {"example_thing": {"block": {"attributes": {"id": {"computed": True}, "name": {"required": True}}}}})
     body = schema.clean("example_thing", Body(OrderedDict(id='"1"', name='"Test"')))

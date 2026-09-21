@@ -98,7 +98,7 @@ AUDITED_RESOURCE_TYPES: dict[tuple[str, str], frozenset[str]] = {
     }),
     ("go-gitea/gitea", "0.8.1"): frozenset({
         "gitea_org", "gitea_repository", "gitea_repository_webhook",
-        "gitea_team", "gitea_team_members",
+        "gitea_team_members",
     }),
     ("svalabs/forgejo", "1.6.0"): frozenset({
         "forgejo_branch_protection", "forgejo_repository",
@@ -125,11 +125,26 @@ QUIRKS: tuple[ProviderQuirk, ...] = (
         upstream="https://github.com/go-gitea/terraform-provider-gitea/blob/v0.8.1/gitea/resource_gitea_repository.go",
     ),
     ProviderQuirk(
-        id="gitea-team-all-repositories",
+        id="gitea-repository-unreadable-manual-merge-settings",
         provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
-        resource_type="gitea_team", kind="conditional_normalization",
-        attributes=("include_all_repositories", "repositories"),
-        summary="The repository list is derived and inapplicable when include_all_repositories is true.",
+        resource_type="gitea_repository", kind="unmanaged_attributes",
+        attributes=("allow_manual_merge", "autodetect_manual_merge"),
+        summary=(
+            "Gitea repository imports do not populate the manual-merge settings; provider "
+            "defaults would otherwise produce a live update after state-only adoption."
+        ),
+        upstream="https://github.com/go-gitea/terraform-provider-gitea/blob/v0.8.1/gitea/resource_gitea_repository.go",
+    ),
+    ProviderQuirk(
+        id="gitea-team-import-update-unsafe",
+        provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
+        resource_type="gitea_team", kind="warning",
+        attributes=("permission", "units", "units_map"),
+        summary=(
+            "Imported modern and owner teams cannot be updated safely: provider 0.8.1 "
+            "drops per-unit permissions, stringifies units with unstable ordering and rejects "
+            "the imported none/owner permission modes. Teams remain inventory-only."
+        ),
         upstream="https://github.com/go-gitea/terraform-provider-gitea/blob/v0.8.1/gitea/resource_gitea_team.go",
     ),
     ProviderQuirk(
