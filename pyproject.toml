@@ -60,7 +60,7 @@ include = [
 python = ">=3.11,<4.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=8,<9"
+pytest = ">=9.0.3,<10"
 pytest-cov = ">=5,<7"
 pyproject-appimage = ">=4.2,<5"
 
