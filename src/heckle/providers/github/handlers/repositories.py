@@ -22,7 +22,11 @@ from heckle.providers.github.model.helpers import (
 
 class RepositoryHandlers:
     def _repository_settings(
-        self, resource: Resource, import_id: str | None, repo: str, repository: MutableMapping[str, Any]
+        self,
+        resource: Resource,
+        import_id: str | None,
+        repo: str,
+        repository: MutableMapping[str, Any],
     ) -> None:
         generated_config = strip_attrs(resource.body, {"name"})
         config = repository_config_from_inventory(repo, self.inventory, generated_config)
@@ -47,8 +51,7 @@ class RepositoryHandlers:
                     old_address=f"synthetic.github_branch_default.{repo}",
                     import_id=repo,
                     new_address=(
-                        "module.repositories.github_branch_default.this"
-                        f"[{hcl_literal(repo)}]"
+                        "module.repositories.github_branch_default.this" f"[{hcl_literal(repo)}]"
                     ),
                 )
             )
@@ -63,8 +66,7 @@ class RepositoryHandlers:
                     old_address=f"synthetic.github_repository_pages.{repo}",
                     import_id=repo,
                     new_address=(
-                        "module.repositories.github_repository_pages.this"
-                        f"[{hcl_literal(repo)}]"
+                        "module.repositories.github_repository_pages.this" f"[{hcl_literal(repo)}]"
                     ),
                 )
             )
@@ -100,7 +102,9 @@ class RepositoryHandlers:
         )
 
     def _repository_ruleset(self, resource, import_id, repo, repository) -> None:
-        name = literal_string(resource.body.attributes.get("name")) or str(import_id or resource.name)
+        name = literal_string(resource.body.attributes.get("name")) or str(
+            import_id or resource.name
+        )
         ruleset_id = import_id.split(":")[-1] if import_id else resource.name
         collection = get_or_create(repository, "rulesets")
         key_name = unique_key(collection, name, ruleset_id)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from heckle.hcl.render import emit_config_fields
 from heckle.providers.github.model.types import Model
 
+
 def emit_access_module(model: Model) -> str:
     family = model.families.get("github_team_repository")
     if not family:

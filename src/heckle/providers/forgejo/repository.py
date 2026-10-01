@@ -5,6 +5,7 @@ read from Forgejo. Its JSON schema does not expose that distinction or the
 cross-attribute validators. Keep those rules here, not in the generic renderer.
 See upstream internal/provider/repository_resource.go, Schema and ImportState.
 """
+
 from __future__ import annotations
 
 from heckle.hcl.types import Body
@@ -12,20 +13,42 @@ from heckle.compatibility import known_provider_behaviour_fields, provider_spec
 
 # These describe how a repository is CREATED or migrated, not its ongoing
 # configuration. In particular, even `mirror = false` requires clone_addr.
-CREATION_FIELDS = frozenset({
-    "auto_init", "gitignores", "license", "readme", "issue_labels", "trust_model",
-    "clone_addr", "auth_token", "lfs", "lfs_endpoint", "labels", "milestones",
-    "service", "mirror",
-})
+CREATION_FIELDS = frozenset(
+    {
+        "auto_init",
+        "gitignores",
+        "license",
+        "readme",
+        "issue_labels",
+        "trust_model",
+        "clone_addr",
+        "auth_token",
+        "lfs",
+        "lfs_endpoint",
+        "labels",
+        "milestones",
+        "service",
+        "mirror",
+    }
+)
 
 # These are initialized with guessed defaults during import and never refreshed
 # from the API by this provider. Do not export those defaults as real settings,
 # even when the corresponding feature is enabled.
-UNREADABLE_FIELDS = frozenset({
-    "allow_manual_merge", "autodetect_manual_merge", "default_delete_branch_after_merge",
-    "allow_fast_forward_only_merge", "allow_rebase_update", "default_allow_maintainer_edit",
-    "default_update_style", "globally_editable_wiki", "wiki_branch", "enable_prune",
-})
+UNREADABLE_FIELDS = frozenset(
+    {
+        "allow_manual_merge",
+        "autodetect_manual_merge",
+        "default_delete_branch_after_merge",
+        "allow_fast_forward_only_merge",
+        "allow_rebase_update",
+        "default_allow_maintainer_edit",
+        "default_update_style",
+        "globally_editable_wiki",
+        "wiki_branch",
+        "enable_prune",
+    }
+)
 
 # mirror_interval requires an explicitly configured mirror, which in turn
 # requires clone_addr. Leave mirroring outside the import configuration rather
@@ -37,8 +60,12 @@ IGNORED_FIELDS = CREATION_FIELDS | UNREADABLE_FIELDS | {"mirror_interval", "arch
 # them only for repositories where the parent feature is explicitly disabled.
 CONDITIONAL_FIELDS = {
     "has_pull_requests": (
-        "ignore_whitespace_conflicts", "allow_merge_commits", "allow_rebase",
-        "allow_rebase_explicit", "allow_squash_merge", "default_merge_style",
+        "ignore_whitespace_conflicts",
+        "allow_merge_commits",
+        "allow_rebase",
+        "allow_rebase_explicit",
+        "allow_squash_merge",
+        "default_merge_style",
     ),
     "has_issues": ("internal_tracker", "external_tracker"),
     "has_wiki": ("external_wiki",),
@@ -48,7 +75,9 @@ CONDITIONAL_FIELDS = {
 # while the controlling feature is disabled. Keep this relationship explicit so
 # Heckle can recognise the provider behaviour under exact guard conditions.
 # Recognition does not assert that applying the resulting plan is safe.
-KNOWN_PROVIDER_BEHAVIOUR_FIELDS = known_provider_behaviour_fields(provider_spec("forgejo"), "forgejo_repository")
+KNOWN_PROVIDER_BEHAVIOUR_FIELDS = known_provider_behaviour_fields(
+    provider_spec("forgejo"), "forgejo_repository"
+)
 
 
 IMPORT_SETTINGS_WARNING = (

@@ -5,6 +5,7 @@ through the pipeline.  A quirk must identify the exact audited provider version 
 where possible, an upstream issue or documentation URL.  Provider bumps are therefore
 explicit compatibility reviews rather than silent upgrades.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -35,10 +36,16 @@ class ProviderQuirk:
 
 
 PROVIDER_SPECS: dict[str, ProviderSpec] = {
-    "github": ProviderSpec("github", "github", "integrations/github", "6.13.0", "base_url", "GITHUB_TOKEN"),
-    "gitlab": ProviderSpec("gitlab", "gitlab", "gitlabhq/gitlab", "19.3.0", "base_url", "GITLAB_TOKEN"),
+    "github": ProviderSpec(
+        "github", "github", "integrations/github", "6.13.0", "base_url", "GITHUB_TOKEN"
+    ),
+    "gitlab": ProviderSpec(
+        "gitlab", "gitlab", "gitlabhq/gitlab", "19.3.0", "base_url", "GITLAB_TOKEN"
+    ),
     "gitea": ProviderSpec("gitea", "gitea", "go-gitea/gitea", "0.8.1", "base_url", "GITEA_TOKEN"),
-    "forgejo": ProviderSpec("forgejo", "forgejo", "svalabs/forgejo", "1.6.0", "host", "FORGEJO_API_TOKEN"),
+    "forgejo": ProviderSpec(
+        "forgejo", "forgejo", "svalabs/forgejo", "1.6.0", "host", "FORGEJO_API_TOKEN"
+    ),
 }
 
 
@@ -63,71 +70,108 @@ AUDITED_VERSIONS: dict[str, frozenset[str]] = {
 # require no workaround at all. Tests keep the GitLab set aligned with the adapter,
 # so a newly-managed resource cannot silently bypass provider-compatibility review.
 AUDITED_RESOURCE_TYPES: dict[tuple[str, str], frozenset[str]] = {
-    ("integrations/github", "6.13.0"): frozenset({
-        "github_actions_environment_secret", "github_actions_environment_variable",
-        "github_actions_organization_permissions", "github_actions_organization_secret",
-        "github_actions_organization_secret_repositories", "github_actions_organization_variable",
-        "github_actions_organization_workflow_permissions", "github_actions_repository_permissions",
-        "github_actions_secret",
-        "github_actions_variable", "github_branch_default", "github_branch_protection",
-        "github_dependabot_organization_secret", "github_dependabot_organization_secret_repositories",
-        "github_dependabot_secret", "github_membership", "github_organization_custom_properties",
-        "github_organization_role", "github_organization_ruleset", "github_organization_settings",
-        "github_organization_webhook", "github_repository", "github_repository_autolink_reference",
-        "github_repository_collaborator", "github_repository_custom_property",
-        "github_repository_deploy_key", "github_repository_environment", "github_repository_pages",
-        "github_repository_ruleset", "github_repository_webhook", "github_team",
-        "github_team_membership", "github_team_repository",
-    }),
-    ("gitlabhq/gitlab", "19.3.0"): frozenset({
-        "gitlab_group",
-        "gitlab_project",
-        "gitlab_group_membership",
-        "gitlab_project_membership",
-        "gitlab_branch_protection",
-        "gitlab_tag_protection",
-        "gitlab_group_hook",
-        "gitlab_project_hook",
-        "gitlab_deploy_key",
-        "gitlab_project_environment",
-        "gitlab_project_approval_rule",
-        "gitlab_group_label",
-        "gitlab_project_label",
-        "gitlab_group_badge",
-        "gitlab_project_badge",
-    }),
-    ("go-gitea/gitea", "0.8.1"): frozenset({
-        "gitea_org", "gitea_repository", "gitea_repository_webhook",
-        "gitea_team_members",
-    }),
-    ("svalabs/forgejo", "1.6.0"): frozenset({
-        "forgejo_branch_protection", "forgejo_repository",
-        "forgejo_repository_webhook", "forgejo_team",
-    }),
+    ("integrations/github", "6.13.0"): frozenset(
+        {
+            "github_actions_environment_secret",
+            "github_actions_environment_variable",
+            "github_actions_organization_permissions",
+            "github_actions_organization_secret",
+            "github_actions_organization_secret_repositories",
+            "github_actions_organization_variable",
+            "github_actions_organization_workflow_permissions",
+            "github_actions_repository_permissions",
+            "github_actions_secret",
+            "github_actions_variable",
+            "github_branch_default",
+            "github_branch_protection",
+            "github_dependabot_organization_secret",
+            "github_dependabot_organization_secret_repositories",
+            "github_dependabot_secret",
+            "github_membership",
+            "github_organization_custom_properties",
+            "github_organization_role",
+            "github_organization_ruleset",
+            "github_organization_settings",
+            "github_organization_webhook",
+            "github_repository",
+            "github_repository_autolink_reference",
+            "github_repository_collaborator",
+            "github_repository_custom_property",
+            "github_repository_deploy_key",
+            "github_repository_environment",
+            "github_repository_pages",
+            "github_repository_ruleset",
+            "github_repository_webhook",
+            "github_team",
+            "github_team_membership",
+            "github_team_repository",
+        }
+    ),
+    ("gitlabhq/gitlab", "19.3.0"): frozenset(
+        {
+            "gitlab_group",
+            "gitlab_project",
+            "gitlab_group_membership",
+            "gitlab_project_membership",
+            "gitlab_branch_protection",
+            "gitlab_tag_protection",
+            "gitlab_group_hook",
+            "gitlab_project_hook",
+            "gitlab_deploy_key",
+            "gitlab_project_environment",
+            "gitlab_project_approval_rule",
+            "gitlab_group_label",
+            "gitlab_project_label",
+            "gitlab_group_badge",
+            "gitlab_project_badge",
+        }
+    ),
+    ("go-gitea/gitea", "0.8.1"): frozenset(
+        {
+            "gitea_org",
+            "gitea_repository",
+            "gitea_repository_webhook",
+            "gitea_team_members",
+        }
+    ),
+    ("svalabs/forgejo", "1.6.0"): frozenset(
+        {
+            "forgejo_branch_protection",
+            "forgejo_repository",
+            "forgejo_repository_webhook",
+            "forgejo_team",
+        }
+    ),
 }
 
 
 QUIRKS: tuple[ProviderQuirk, ...] = (
     ProviderQuirk(
         id="gitea-organization-create-only-team-access",
-        provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
-        resource_type="gitea_org", kind="unmanaged_attributes",
+        provider="go-gitea/gitea",
+        versions=frozenset({"0.8.1"}),
+        resource_type="gitea_org",
+        kind="unmanaged_attributes",
         attributes=("repo_admin_change_team_access",),
         summary="Gitea's organisation team-access switch is create-only and is neither read nor updated by provider 0.8.1.",
         upstream="https://github.com/go-gitea/terraform-provider-gitea/blob/v0.8.1/gitea/resource_gitea_organisation.go",
     ),
     ProviderQuirk(
         id="gitea-repository-destroy-control",
-        provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
-        resource_type="gitea_repository", kind="unmanaged_attributes",
+        provider="go-gitea/gitea",
+        versions=frozenset({"0.8.1"}),
+        resource_type="gitea_repository",
+        kind="unmanaged_attributes",
         attributes=("archive_on_destroy",),
         summary="archive_on_destroy controls provider deletion behaviour rather than imported repository state.",
         upstream="https://github.com/go-gitea/terraform-provider-gitea/blob/v0.8.1/gitea/resource_gitea_repository.go",
     ),
     ProviderQuirk(
         id="gitea-repository-unreadable-manual-merge-settings",
-        provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
-        resource_type="gitea_repository", kind="unmanaged_attributes",
+        provider="go-gitea/gitea",
+        versions=frozenset({"0.8.1"}),
+        resource_type="gitea_repository",
+        kind="unmanaged_attributes",
         attributes=("allow_manual_merge", "autodetect_manual_merge"),
         summary=(
             "Gitea repository imports do not populate the manual-merge settings; provider "
@@ -137,8 +181,10 @@ QUIRKS: tuple[ProviderQuirk, ...] = (
     ),
     ProviderQuirk(
         id="gitea-team-import-update-unsafe",
-        provider="go-gitea/gitea", versions=frozenset({"0.8.1"}),
-        resource_type="gitea_team", kind="warning",
+        provider="go-gitea/gitea",
+        versions=frozenset({"0.8.1"}),
+        resource_type="gitea_team",
+        kind="warning",
         attributes=("permission", "units", "units_map"),
         summary=(
             "Imported modern and owner teams cannot be updated safely: provider 0.8.1 "
@@ -465,7 +511,10 @@ QUIRKS: tuple[ProviderQuirk, ...] = (
         resource_type="gitlab_project_environment",
         kind="empty_string_unset",
         attributes=(
-            "external_url", "tier", "kubernetes_namespace", "flux_resource_path",
+            "external_url",
+            "tier",
+            "kubernetes_namespace",
+            "flux_resource_path",
             "auto_stop_setting",
         ),
         summary=(
@@ -724,11 +773,19 @@ QUIRKS: tuple[ProviderQuirk, ...] = (
         resource_type="forgejo_repository",
         kind="known_provider_behaviour",
         attributes=(
-            "ignore_whitespace_conflicts", "allow_merge_commits", "allow_rebase",
-            "allow_rebase_explicit", "allow_squash_merge", "default_merge_style",
-            "allow_manual_merge", "autodetect_manual_merge",
-            "default_delete_branch_after_merge", "allow_fast_forward_only_merge",
-            "allow_rebase_update", "default_allow_maintainer_edit", "default_update_style",
+            "ignore_whitespace_conflicts",
+            "allow_merge_commits",
+            "allow_rebase",
+            "allow_rebase_explicit",
+            "allow_squash_merge",
+            "default_merge_style",
+            "allow_manual_merge",
+            "autodetect_manual_merge",
+            "default_delete_branch_after_merge",
+            "allow_fast_forward_only_merge",
+            "allow_rebase_update",
+            "default_allow_maintainer_edit",
+            "default_update_style",
         ),
         guard=("has_pull_requests", False),
         summary="Pull-request subordinate settings can round-trip to provider defaults while pull requests are disabled.",
@@ -786,13 +843,13 @@ def unmanaged_attributes(spec: ProviderSpec, resource_type: str) -> set[str]:
     return output
 
 
-
 def empty_string_unset_attributes(spec: ProviderSpec, resource_type: str) -> set[str]:
     output: set[str] = set()
     for quirk in quirks_for(spec, resource_type):
         if quirk.kind == "empty_string_unset":
             output.update(quirk.attributes)
     return output
+
 
 def audited(spec: ProviderSpec) -> bool:
     return spec.version in AUDITED_VERSIONS.get(spec.source, frozenset())
@@ -828,8 +885,9 @@ def compatibility_warnings(spec: ProviderSpec) -> Iterable[str]:
         yield quirk.warning()
 
 
-
-def known_provider_behaviour_fields(spec: ProviderSpec, resource_type: str) -> dict[str, frozenset[str]]:
+def known_provider_behaviour_fields(
+    spec: ProviderSpec, resource_type: str
+) -> dict[str, frozenset[str]]:
     grouped: dict[str, set[str]] = {}
     for quirk in quirks_for(spec, resource_type):
         if quirk.kind != "known_provider_behaviour" or quirk.guard is None:
@@ -841,11 +899,20 @@ def known_provider_behaviour_fields(spec: ProviderSpec, resource_type: str) -> d
     return {name: frozenset(values) for name, values in grouped.items()}
 
 
-def known_provider_behaviour_for(spec: ProviderSpec, change: UnsafeChange) -> KnownProviderBehaviour | None:
+def known_provider_behaviour_for(
+    spec: ProviderSpec, change: UnsafeChange
+) -> KnownProviderBehaviour | None:
     """Recognise version-scoped provider behaviour declared in the compatibility registry."""
-    if change.actions != ("update",) or not isinstance(change.before, dict) or not isinstance(change.after, dict):
+    if (
+        change.actions != ("update",)
+        or not isinstance(change.before, dict)
+        or not isinstance(change.after, dict)
+    ):
         return None
-    resource_type = next((q.resource_type for q in quirks_for(spec) if f".{q.resource_type}." in change.address), None)
+    resource_type = next(
+        (q.resource_type for q in quirks_for(spec) if f".{q.resource_type}." in change.address),
+        None,
+    )
     if resource_type is None:
         return None
     changed_top = {
@@ -874,6 +941,7 @@ def known_provider_behaviour_for(spec: ProviderSpec, change: UnsafeChange) -> Kn
             guards=tuple(sorted(set(guards))),
         )
     return None
+
 
 def format_compatibility(specs: Iterable[ProviderSpec]) -> str:
     lines: list[str] = []

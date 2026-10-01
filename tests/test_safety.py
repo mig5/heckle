@@ -14,33 +14,35 @@ from fixtures import connection, model_for
 
 
 def test_destination_must_be_disposable(tmp_path):
-    destination = tmp_path / 'output'
+    destination = tmp_path / "output"
     destination.mkdir()
-    with pytest.raises(GenerationError, match='marked'):
+    with pytest.raises(GenerationError, match="marked"):
         check_destination(destination, force=True)
-    (destination / '.heckle-generated').touch()
+    (destination / ".heckle-generated").touch()
     assert check_destination(destination, force=True) == destination
-    (destination / 'secret.auto.tfvars').touch()
-    with pytest.raises(GenerationError, match='tfvars'):
+    (destination / "secret.auto.tfvars").touch()
+    with pytest.raises(GenerationError, match="tfvars"):
         check_destination(destination, force=True)
 
 
-@pytest.mark.parametrize('contents', ['terraform { backend "s3" {} }', 'terraform {\n backend\t"s3" {\n}\n}'])
+@pytest.mark.parametrize(
+    "contents", ['terraform { backend "s3" {} }', 'terraform {\n backend\t"s3" {\n}\n}']
+)
 def test_backend_refuses_forced_replacement(tmp_path, contents):
-    destination = tmp_path / 'output'
+    destination = tmp_path / "output"
     destination.mkdir()
-    (destination / '.heckle-generated').touch()
-    (destination / 'backend.tf').write_text(contents)
-    with pytest.raises(GenerationError, match='backend'):
+    (destination / ".heckle-generated").touch()
+    (destination / "backend.tf").write_text(contents)
+    with pytest.raises(GenerationError, match="backend"):
         check_destination(destination, force=True)
 
 
 def test_symlinks_and_current_directory_are_refused(tmp_path, monkeypatch):
-    real = tmp_path / 'real'
+    real = tmp_path / "real"
     real.mkdir()
-    link = tmp_path / 'link'
+    link = tmp_path / "link"
     link.symlink_to(real, target_is_directory=True)
-    with pytest.raises(GenerationError, match='symbolic'):
+    with pytest.raises(GenerationError, match="symbolic"):
         check_destination(link, force=True)
     monkeypatch.chdir(real)
     with pytest.raises(GenerationError):
@@ -59,125 +61,164 @@ def test_forced_replacement_rejects_nested_symlinks(tmp_path):
 
 
 def test_publish_failure_restores_original(tmp_path, monkeypatch):
-    destination = tmp_path / 'output'
+    destination = tmp_path / "output"
     destination.mkdir()
-    (destination / '.heckle-generated').touch()
-    (destination / 'existing').write_text('preserve me')
-    staged = tmp_path / 'staged'
+    (destination / ".heckle-generated").touch()
+    (destination / "existing").write_text("preserve me")
+    staged = tmp_path / "staged"
     staged.mkdir()
     original = Path.rename
+
     def fail(source, target):
         if source == staged:
-            raise OSError('injected publication failure')
+            raise OSError("injected publication failure")
         return original(source, target)
-    monkeypatch.setattr(Path, 'rename', fail)
+
+    monkeypatch.setattr(Path, "rename", fail)
     with pytest.raises(OSError):
         publish(staged, destination, force=True)
-    assert (destination / 'existing').read_text() == 'preserve me'
+    assert (destination / "existing").read_text() == "preserve me"
 
 
 def test_private_json_permissions(tmp_path):
-    path = tmp_path / 'private' / 'snapshot.json'
-    write_private_json(path, {'secret': 'example'})
+    path = tmp_path / "private" / "snapshot.json"
+    write_private_json(path, {"secret": "example"})
     assert path.stat().st_mode & 0o777 == 0o600
     assert path.parent.stat().st_mode & 0o777 == 0o700
 
 
 def test_github_snapshot_rejects_path_traversal(tmp_path):
     model = model_for("github")
-    model.extensions['github']['files']['../escape.json'] = {}
-    with pytest.raises(GenerationError, match='Invalid path'):
-        restore_snapshot(model, tmp_path / 'snapshot')
-    assert not (tmp_path / 'escape.json').exists()
+    model.extensions["github"]["files"]["../escape.json"] = {}
+    with pytest.raises(GenerationError, match="Invalid path"):
+        restore_snapshot(model, tmp_path / "snapshot")
+    assert not (tmp_path / "escape.json").exists()
 
 
 def runner(monkeypatch):
-    monkeypatch.setattr('heckle.opentofu.shutil.which', lambda executable: '/usr/bin/true')
-    return TfRunner(connection=connection('github'))
+    monkeypatch.setattr("heckle.opentofu.shutil.which", lambda executable: "/usr/bin/true")
+    return TfRunner(connection=connection("github"))
 
 
 def test_tofu_environment_isolated(monkeypatch):
-    for key in ('TF_LOG', 'TF_LOG_PATH', 'TF_CLI_ARGS', 'TF_CLI_ARGS_plan', 'TF_DATA_DIR', 'GITHUB_OWNER', 'TF_VAR_github_org', 'TF_WORKSPACE'):
-        monkeypatch.setenv(key, 'untrusted')
+    for key in (
+        "TF_LOG",
+        "TF_LOG_PATH",
+        "TF_CLI_ARGS",
+        "TF_CLI_ARGS_plan",
+        "TF_DATA_DIR",
+        "GITHUB_OWNER",
+        "TF_VAR_github_org",
+        "TF_WORKSPACE",
+    ):
+        monkeypatch.setenv(key, "untrusted")
     env = runner(monkeypatch).environment()
-    assert not any(key in env for key in ('TF_LOG', 'TF_LOG_PATH', 'TF_CLI_ARGS', 'TF_CLI_ARGS_plan', 'TF_DATA_DIR', 'GITHUB_OWNER', 'TF_VAR_github_org', 'TF_WORKSPACE'))
-    assert env['GITHUB_TOKEN'] == 'test-token'
-    assert runner(monkeypatch).environment(managed_state=True)['TF_WORKSPACE'] == 'untrusted'
+    assert not any(
+        key in env
+        for key in (
+            "TF_LOG",
+            "TF_LOG_PATH",
+            "TF_CLI_ARGS",
+            "TF_CLI_ARGS_plan",
+            "TF_DATA_DIR",
+            "GITHUB_OWNER",
+            "TF_VAR_github_org",
+            "TF_WORKSPACE",
+        )
+    )
+    assert env["GITHUB_TOKEN"] == "test-token"
+    assert runner(monkeypatch).environment(managed_state=True)["TF_WORKSPACE"] == "untrusted"
 
 
-@pytest.mark.parametrize('arguments', [['apply'], ['import', 'x', '1'], ['state', 'rm', 'x'], ['destroy']])
+@pytest.mark.parametrize(
+    "arguments", [["apply"], ["import", "x", "1"], ["state", "rm", "x"], ["destroy"]]
+)
 def test_tofu_cannot_mutate_state(monkeypatch, tmp_path, arguments):
     with pytest.raises(GenerationError):
         runner(monkeypatch).run(arguments, tmp_path)
 
 
 def test_provider_errors_are_not_logged(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, stdout='SECRET IN PROVIDER OUTPUT'))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args, 1, stdout="SECRET IN PROVIDER OUTPUT"
+        ),
+    )
     with pytest.raises(GenerationError) as error:
-        runner(monkeypatch).run(['validate'], tmp_path)
-    assert 'SECRET' not in str(error.value)
-    assert 'SECRET' not in capsys.readouterr().out
+        runner(monkeypatch).run(["validate"], tmp_path)
+    assert "SECRET" not in str(error.value)
+    assert "SECRET" not in capsys.readouterr().out
 
 
 def test_empty_blocks_do_not_swallow_following_resource(tmp_path):
-    path = tmp_path / 'generated.tf'
-    path.write_text('resource "example_one" "one" {}\nresource "example_two" "two" {\n name = "two"\n}\n')
+    path = tmp_path / "generated.tf"
+    path.write_text(
+        'resource "example_one" "one" {}\nresource "example_two" "two" {\n name = "two"\n}\n'
+    )
     blocks, _ = extract_top_blocks(path)
     assert len(blocks) == 2
-    assert parse_resource(blocks[1]).body.attributes['name'] == '"two"'
+    assert parse_resource(blocks[1]).body.attributes["name"] == '"two"'
 
 
 def test_unterminated_hcl_is_rejected(tmp_path):
-    path = tmp_path / 'broken.tf'
+    path = tmp_path / "broken.tf"
     path.write_text('resource "example" "one" {\nname = "one"\n')
-    with pytest.raises(GenerationError, match='Unterminated'):
+    with pytest.raises(GenerationError, match="Unterminated"):
         extract_top_blocks(path)
-    with pytest.raises(GenerationError, match='Duplicate'):
+    with pytest.raises(GenerationError, match="Duplicate"):
         parse_body('name = "one"\nname = "two"\n')
 
 
 def test_adoption_check_rejects_live_updates(monkeypatch, tmp_path):
     tofu = runner(monkeypatch)
+
     def fake_run(arguments, cwd, **kwargs):
-        if arguments[0] == 'show':
+        if arguments[0] == "show":
             payload = {
-                'errored': False,
-                'resource_changes': [
+                "errored": False,
+                "resource_changes": [
                     {
-                        'address': 'module.repo.example.this["disabled-pr"]',
-                        'mode': 'managed',
-                        'change': {'actions': ['update'], 'importing': {'id': 'alice/disabled-pr'}},
+                        "address": 'module.repo.example.this["disabled-pr"]',
+                        "mode": "managed",
+                        "change": {"actions": ["update"], "importing": {"id": "alice/disabled-pr"}},
                     }
                 ],
             }
             return subprocess.CompletedProcess(arguments, 0, stdout=json.dumps(payload))
-        return subprocess.CompletedProcess(arguments, 0, stdout='')
-    monkeypatch.setattr(tofu, 'run', fake_run)
-    with pytest.raises(GenerationError, match='would change live resources'):
-        tofu.adoption_check(tmp_path, {'secret_input': '"existing"'}, disposable=True)
-    assert not (tmp_path / '.heckle-adoption.auto.tfvars').exists()
-    assert not (tmp_path / '.heckle-adoption.tfplan').exists()
+        return subprocess.CompletedProcess(arguments, 0, stdout="")
+
+    monkeypatch.setattr(tofu, "run", fake_run)
+    with pytest.raises(GenerationError, match="would change live resources"):
+        tofu.adoption_check(tmp_path, {"secret_input": '"existing"'}, disposable=True)
+    assert not (tmp_path / ".heckle-adoption.auto.tfvars").exists()
+    assert not (tmp_path / ".heckle-adoption.tfplan").exists()
 
 
 def test_adoption_check_accepts_import_noops(monkeypatch, tmp_path):
     tofu = runner(monkeypatch)
+
     def fake_run(arguments, cwd, **kwargs):
-        if arguments[0] == 'show':
+        if arguments[0] == "show":
             payload = {
-                'errored': False,
-                'resource_changes': [
+                "errored": False,
+                "resource_changes": [
                     {
-                        'address': 'module.repo.example.this["repo"]',
-                        'mode': 'managed',
-                        'change': {'actions': ['no-op'], 'importing': {'id': 'alice/repo'}},
+                        "address": 'module.repo.example.this["repo"]',
+                        "mode": "managed",
+                        "change": {"actions": ["no-op"], "importing": {"id": "alice/repo"}},
                     }
                 ],
             }
             return subprocess.CompletedProcess(arguments, 0, stdout=json.dumps(payload))
-        return subprocess.CompletedProcess(arguments, 0, stdout='')
-    monkeypatch.setattr(tofu, 'run', fake_run)
+        return subprocess.CompletedProcess(arguments, 0, stdout="")
+
+    monkeypatch.setattr(tofu, "run", fake_run)
     assert tofu.adoption_check(tmp_path, disposable=True) == {
-        'imports': 1, 'no_op_resources': 1, 'unsafe_changes': 0,
+        "imports": 1,
+        "no_op_resources": 1,
+        "unsafe_changes": 0,
     }
 
 
@@ -365,7 +406,12 @@ def test_forgejo_pr_provider_behaviour_is_recognised(monkeypatch, tmp_path):
     monkeypatch.setattr(tofu, "run", fake_run)
     result = tofu.state_only_adoption_check(
         tmp_path,
-        [('module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]', "mig5/repo")],
+        [
+            (
+                'module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]',
+                "mig5/repo",
+            )
+        ],
         disposable=True,
         known_behaviour=ForgejoProvider().known_provider_behaviour,
     )
@@ -376,7 +422,9 @@ def test_forgejo_pr_provider_behaviour_is_recognised(monkeypatch, tmp_path):
     assert result["unsafe_changes"] == 0
 
 
-def test_forgejo_pr_provider_behaviour_is_not_recognised_when_prs_are_enabled(monkeypatch, tmp_path):
+def test_forgejo_pr_provider_behaviour_is_not_recognised_when_prs_are_enabled(
+    monkeypatch, tmp_path
+):
     from heckle.providers.forgejo.adapter import ForgejoProvider
 
     tofu = runner(monkeypatch)
@@ -392,7 +440,12 @@ def test_forgejo_pr_provider_behaviour_is_not_recognised_when_prs_are_enabled(mo
     with pytest.raises(GenerationError, match="allow_merge_commits"):
         tofu.state_only_adoption_check(
             tmp_path,
-            [('module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]', "mig5/repo")],
+            [
+                (
+                    'module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]',
+                    "mig5/repo",
+                )
+            ],
             disposable=True,
             known_behaviour=ForgejoProvider().known_provider_behaviour,
         )
@@ -414,7 +467,12 @@ def test_forgejo_known_pr_behaviour_does_not_hide_real_changes(monkeypatch, tmp_
     with pytest.raises(GenerationError, match="private"):
         tofu.state_only_adoption_check(
             tmp_path,
-            [('module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]', "mig5/repo")],
+            [
+                (
+                    'module.forgejo_repository.forgejo_repository.profile_deadbeef00["mig5/repo"]',
+                    "mig5/repo",
+                )
+            ],
             disposable=True,
             known_behaviour=ForgejoProvider().known_provider_behaviour,
         )
@@ -453,16 +511,20 @@ def test_generated_adopt_script_accepts_only_rehearsed_known_provider_behaviour(
     write_state_only_adopt_script(
         script,
         [(address, "mig5/repo")],
-        [{
-            "address": address,
-            "actions": ["update"],
-            "attributes": [
-                "allow_merge_commits", "allow_rebase", "allow_rebase_explicit",
-                "allow_squash_merge",
-            ],
-            "reason": "known provider behaviour while has_pull_requests remains disabled",
-            "guards": {"has_pull_requests": False},
-        }],
+        [
+            {
+                "address": address,
+                "actions": ["update"],
+                "attributes": [
+                    "allow_merge_commits",
+                    "allow_rebase",
+                    "allow_rebase_explicit",
+                    "allow_squash_merge",
+                ],
+                "reason": "known provider behaviour while has_pull_requests remains disabled",
+                "guards": {"has_pull_requests": False},
+            }
+        ],
     )
     env = os.environ.copy()
     env.update({"HECKLE_TF_BIN": str(tofu), "FAKE_PLAN_JSON": str(plan_json)})
@@ -483,16 +545,20 @@ def test_generated_adopt_script_rejects_extra_live_change(tmp_path):
     write_state_only_adopt_script(
         script,
         [(address, "mig5/repo")],
-        [{
-            "address": address,
-            "actions": ["update"],
-            "attributes": [
-                "allow_merge_commits", "allow_rebase", "allow_rebase_explicit",
-                "allow_squash_merge",
-            ],
-            "reason": "known provider behaviour while has_pull_requests remains disabled",
-            "guards": {"has_pull_requests": False},
-        }],
+        [
+            {
+                "address": address,
+                "actions": ["update"],
+                "attributes": [
+                    "allow_merge_commits",
+                    "allow_rebase",
+                    "allow_rebase_explicit",
+                    "allow_squash_merge",
+                ],
+                "reason": "known provider behaviour while has_pull_requests remains disabled",
+                "guards": {"has_pull_requests": False},
+            }
+        ],
     )
     env = os.environ.copy()
     env.update({"HECKLE_TF_BIN": str(tofu), "FAKE_PLAN_JSON": str(plan_json)})

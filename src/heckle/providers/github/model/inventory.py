@@ -65,15 +65,14 @@ REPOSITORY_API_ATTRIBUTES = OrderedDict(
     ]
 )
 
+
 def read_json(path: Path, default: Any = None) -> Any:
     if not path.exists():
         return default
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def repository_config_from_inventory(
-    repo: str, inventory: Path, generated: Body
-) -> Body:
+def repository_config_from_inventory(repo: str, inventory: Path, generated: Body) -> Body:
     """Return stable ongoing settings for an already-existing repository.
 
     Terraform/OpenTofu config generation can omit explicit false/default values and can
@@ -106,6 +105,7 @@ def repository_config_from_inventory(
         config.attributes.pop("squash_merge_commit_message", None)
 
     return config
+
 
 def repository_pages_config_from_inventory(details: Mapping[str, Any]) -> Body | None:
     """Build non-deprecated github_repository_pages configuration."""
@@ -150,6 +150,7 @@ def repository_pages_config_from_inventory(details: Mapping[str, Any]) -> Body |
 
     return Body(attributes=attributes, blocks=blocks)
 
+
 def load_identity_maps(inventory: Path) -> dict[str, Any]:
     repos = read_json(inventory / "repositories.json", []) or []
     active = [r for r in repos if not r.get("archived", False)]
@@ -157,9 +158,7 @@ def load_identity_maps(inventory: Path) -> dict[str, Any]:
     repo_id_to_name: dict[str, str] = {}
     repo_node_to_name: dict[str, str] = {}
     for name, summary in repo_by_name.items():
-        details = read_json(
-            inventory / "repositories" / name / "repository.json", summary
-        )
+        details = read_json(inventory / "repositories" / name / "repository.json", summary)
         for candidate in (summary, details):
             if candidate.get("id") is not None:
                 repo_id_to_name[str(candidate["id"])] = name
@@ -169,9 +168,7 @@ def load_identity_maps(inventory: Path) -> dict[str, Any]:
     teams = read_json(inventory / "teams.json", []) or []
     team_id_to_slug = {str(t["id"]): str(t["slug"]) for t in teams}
     team_slug_to_id = {str(t["slug"]): str(t["id"]) for t in teams}
-    team_node_to_slug = {
-        str(t["node_id"]): str(t["slug"]) for t in teams if t.get("node_id")
-    }
+    team_node_to_slug = {str(t["node_id"]): str(t["slug"]) for t in teams if t.get("node_id")}
     return {
         "repo_by_name": repo_by_name,
         "repo_id_to_name": repo_id_to_name,
@@ -181,9 +178,8 @@ def load_identity_maps(inventory: Path) -> dict[str, Any]:
         "team_node_to_slug": team_node_to_slug,
     }
 
-def repository_from_value(
-    value: str | None, identities: Mapping[str, Any]
-) -> str | None:
+
+def repository_from_value(value: str | None, identities: Mapping[str, Any]) -> str | None:
     if value is None:
         return None
     if value in identities["repo_by_name"]:
@@ -198,14 +194,15 @@ def repository_from_value(
             return candidate
     return None
 
+
 def import_by_address(records: Sequence[ImportRecord]) -> dict[str, ImportRecord]:
     return {record.old_address: record for record in records}
 
-def resource_import_id(
-    resource: Resource, imports: Mapping[str, ImportRecord]
-) -> str | None:
+
+def resource_import_id(resource: Resource, imports: Mapping[str, ImportRecord]) -> str | None:
     record = imports.get(resource.address)
     return record.import_id if record else None
+
 
 def classify_repository_resource(
     resource: Resource,
@@ -226,6 +223,7 @@ def classify_repository_resource(
             return repo
     return None
 
+
 def prepare_long_ruleset_name(body: Body) -> tuple[Body, bool, str | None]:
     name = literal_string(body.attributes.get("name"))
     if name is None or len(name) <= 100:
@@ -235,4 +233,3 @@ def prepare_long_ruleset_name(body: Body) -> tuple[Body, bool, str | None]:
     result.attributes["name"] = hcl_literal(shortened)
     result.attributes["observed_name"] = hcl_literal(name)
     return result, True, name
-

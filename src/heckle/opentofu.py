@@ -1,4 +1,5 @@
 """Terraform/OpenTofu subprocess boundary. Never applies plans; state-only imports are limited to adoption safety rehearsal."""
+
 from __future__ import annotations
 
 import json
@@ -74,14 +75,23 @@ class TfRunner:
         hint = "Select a supported executable with --tf or HECKLE_TF_BIN."
         try:
             result = subprocess.run(
-                [self.executable, "version", "-json"], cwd=cwd,
-                env=self.environment(), text=True, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, check=False, timeout=30,
+                [self.executable, "version", "-json"],
+                cwd=cwd,
+                env=self.environment(),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=30,
             )
         except subprocess.TimeoutExpired as exc:
-            raise GenerationError(f"{self.tool_name} version check timed out after 30 seconds. {hint}") from exc
+            raise GenerationError(
+                f"{self.tool_name} version check timed out after 30 seconds. {hint}"
+            ) from exc
         except OSError as exc:
-            raise GenerationError(f"Unable to run {self.tool_name}: {exc.strerror}. {hint}") from exc
+            raise GenerationError(
+                f"Unable to run {self.tool_name}: {exc.strerror}. {hint}"
+            ) from exc
         if result.returncode:
             raise GenerationError(
                 f"{self.tool_name} version -json failed (exit {result.returncode}). {hint}"
@@ -89,17 +99,25 @@ class TfRunner:
         try:
             payload = json.loads(result.stdout)
             version = payload.get("terraform_version") if isinstance(payload, dict) else None
-            match = re.fullmatch(
-                r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?",
-                version,
-            ) if isinstance(version, str) else None
+            match = (
+                re.fullmatch(
+                    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?",
+                    version,
+                )
+                if isinstance(version, str)
+                else None
+            )
         except ValueError:
             match = None
         if match is None:
-            raise GenerationError(f"{self.tool_name} version -json returned an invalid version response. {hint}")
+            raise GenerationError(
+                f"{self.tool_name} version -json returned an invalid version response. {hint}"
+            )
         # Match the generated required_version constraint, including its exclusion
         # of prereleases. Both CLIs use terraform_version in their JSON response.
-        if not (TF_MIN_VERSION <= tuple(map(int, match.group(1, 2, 3))) < TF_MAX_VERSION) or match.group(4):
+        if not (
+            TF_MIN_VERSION <= tuple(map(int, match.group(1, 2, 3))) < TF_MAX_VERSION
+        ) or match.group(4):
             raise GenerationError(
                 f"Unsupported {self.tool_name} version {version} at {self.executable}; "
                 f"Heckle requires {TF_VERSION_CONSTRAINT} (stable releases). {hint}"
@@ -111,7 +129,14 @@ class TfRunner:
         # A shell's global flags or debug logging must not redirect temporary
         # state, inject an apply option, or leak provider responses into a log.
         for key in list(env):
-            if key.startswith("TF_CLI_ARGS") or key in {"TF_LOG", "TF_LOG_PATH", "TF_LOG_PROVIDER", "TF_DATA_DIR", "TF_VAR_github_org", "GITHUB_OWNER"}:
+            if key.startswith("TF_CLI_ARGS") or key in {
+                "TF_LOG",
+                "TF_LOG_PATH",
+                "TF_LOG_PROVIDER",
+                "TF_DATA_DIR",
+                "TF_VAR_github_org",
+                "GITHUB_OWNER",
+            }:
                 env.pop(key, None)
         if not managed_state:
             env.pop("TF_WORKSPACE", None)
@@ -120,7 +145,14 @@ class TfRunner:
             env.update(self.connection.provider_environment())
         return env
 
-    def run(self, arguments: Sequence[str], cwd: Path, *, allow_failure: bool = False, managed_state: bool = False) -> subprocess.CompletedProcess[str]:
+    def run(
+        self,
+        arguments: Sequence[str],
+        cwd: Path,
+        *,
+        allow_failure: bool = False,
+        managed_state: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
         allowed = {"init", "plan", "show", "fmt", "validate", "providers", "state"}
         if not arguments or arguments[0] not in allowed:
             raise GenerationError("Refusing an unsupported Terraform/OpenTofu operation")
@@ -129,19 +161,33 @@ class TfRunner:
         self.last_arguments = tuple(arguments)
         self.last_cwd = Path(cwd).resolve()
         try:
-            result = subprocess.run([self.executable, *arguments], cwd=cwd, env=self.environment(managed_state=managed_state), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+            result = subprocess.run(
+                [self.executable, *arguments],
+                cwd=cwd,
+                env=self.environment(managed_state=managed_state),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
         except OSError as exc:
             raise GenerationError(f"Unable to run {self.tool_name}: {exc.strerror}") from exc
         if result.returncode and not allow_failure:
             # Provider output can include confidential values, so it never goes
             # directly to console or into a published generation directory.
-            raise GenerationError(f"{self.tool_name} {' '.join(arguments[:2])} failed (exit {result.returncode}). Run the same command in a private workspace for detailed diagnostics.")
+            raise GenerationError(
+                f"{self.tool_name} {' '.join(arguments[:2])} failed (exit {result.returncode}). Run the same command in a private workspace for detailed diagnostics."
+            )
         return result
 
-    def hydrate(self, provider: ProviderAdapter, plan: ImportPlan, workspace: Path) -> tuple[list[Resource], ProviderSchema]:
+    def hydrate(
+        self, provider: ProviderAdapter, plan: ImportPlan, workspace: Path
+    ) -> tuple[list[Resource], ProviderSchema]:
         workspace.mkdir(parents=True, mode=0o700)
         (workspace / "versions.tf").write_text(provider.spec.versions_hcl(), encoding="utf-8")
-        (workspace / "provider.tf").write_text(provider.spec.configuration_hcl(plan.model.source), encoding="utf-8")
+        (workspace / "provider.tf").write_text(
+            provider.spec.configuration_hcl(plan.model.source), encoding="utf-8"
+        )
         self.run(["init", "-backend=false", "-input=false", "-no-color"], workspace)
         raw = self.run(["providers", "schema", "-json"], workspace)
         try:
@@ -151,20 +197,37 @@ class TfRunner:
         unavailable = [c for c in plan.candidates if not schema.supports(c.resource_type)]
         if unavailable:
             names = sorted({c.resource_type for c in unavailable})
-            raise GenerationError("Pinned provider lacks configured import resource types: " + ", ".join(names))
-        imports = "\n".join(f"import {{\n  to = {address}\n  id = {hcl_string(import_id)}\n}}\n" for address, import_id in provider.imports(plan))
+            raise GenerationError(
+                "Pinned provider lacks configured import resource types: " + ", ".join(names)
+            )
+        imports = "\n".join(
+            f"import {{\n  to = {address}\n  id = {hcl_string(import_id)}\n}}\n"
+            for address, import_id in provider.imports(plan)
+        )
         (workspace / "imports.tf").write_text(imports, encoding="utf-8")
         extra = workspace / "sensitive-metadata.tf"
         extra.write_text(provider.bootstrap_extra(plan), encoding="utf-8")
         extra.chmod(0o600)
         flat = workspace / "generated.tf"
         if plan.candidates:
-            self.run(["plan", "-input=false", "-lock=false", "-no-color", "-generate-config-out=generated.tf"], workspace, allow_failure=True)
+            self.run(
+                [
+                    "plan",
+                    "-input=false",
+                    "-lock=false",
+                    "-no-color",
+                    "-generate-config-out=generated.tf",
+                ],
+                workspace,
+                allow_failure=True,
+            )
         resources = collect_resources(flat, extra)
         found = {resource.address for resource in resources}
         missing = [address for address, _ in provider.imports(plan) if address not in found]
         if missing:
-            raise GenerationError(f"Provider hydration did not return all import targets ({len(missing)} missing); first: {missing[0]}. No output was published.")
+            raise GenerationError(
+                f"Provider hydration did not return all import targets ({len(missing)} missing); first: {missing[0]}. No output was published."
+            )
         return resources, schema
 
     def format(self, root: Path) -> None:
@@ -179,9 +242,10 @@ class TfRunner:
             if disposable and not had_cache:
                 shutil.rmtree(root / ".terraform", ignore_errors=True)
 
-
     @staticmethod
-    def _changed_paths(before: object, after: object, unknown: object, prefix: str = "") -> list[str]:
+    def _changed_paths(
+        before: object, after: object, unknown: object, prefix: str = ""
+    ) -> list[str]:
         """Return changed attribute paths without ever exposing their values."""
         if unknown is True:
             return []
@@ -192,9 +256,11 @@ class TfRunner:
             output: list[str] = []
             for key in sorted(set(left) | set(right)):
                 child = f"{prefix}.{key}" if prefix else str(key)
-                output.extend(TfRunner._changed_paths(
-                    left.get(key), right.get(key), unknown_map.get(key), child
-                ))
+                output.extend(
+                    TfRunner._changed_paths(
+                        left.get(key), right.get(key), unknown_map.get(key), child
+                    )
+                )
             return output
         if isinstance(before, list) or isinstance(after, list):
             left = before if isinstance(before, list) else []
@@ -203,12 +269,14 @@ class TfRunner:
             output: list[str] = []
             for index in range(max(len(left), len(right))):
                 child = f"{prefix}[{index}]"
-                output.extend(TfRunner._changed_paths(
-                    left[index] if index < len(left) else None,
-                    right[index] if index < len(right) else None,
-                    unknown_list[index] if index < len(unknown_list) else None,
-                    child,
-                ))
+                output.extend(
+                    TfRunner._changed_paths(
+                        left[index] if index < len(left) else None,
+                        right[index] if index < len(right) else None,
+                        unknown_list[index] if index < len(unknown_list) else None,
+                        child,
+                    )
+                )
             return output
         return [prefix or "<root>"] if before != after else []
 
@@ -231,16 +299,20 @@ class TfRunner:
             if actions == ("no-op",):
                 noops += 1
                 continue
-            attributes = tuple(cls._changed_paths(
-                detail.get("before"), detail.get("after"), detail.get("after_unknown")
-            ))
-            unsafe.append(UnsafeChange(
-                str(change.get("address", "<unknown>")),
-                actions,
-                attributes,
-                detail.get("before"),
-                detail.get("after"),
-            ))
+            attributes = tuple(
+                cls._changed_paths(
+                    detail.get("before"), detail.get("after"), detail.get("after_unknown")
+                )
+            )
+            unsafe.append(
+                UnsafeChange(
+                    str(change.get("address", "<unknown>")),
+                    actions,
+                    attributes,
+                    detail.get("before"),
+                    detail.get("after"),
+                )
+            )
         return imports, noops, unsafe
 
     @staticmethod
@@ -255,20 +327,23 @@ class TfRunner:
             if decision is None:
                 unsafe.append(change)
                 continue
-            recognised.append({
-                "address": change.address,
-                "actions": list(change.actions),
-                "attributes": list(change.attributes),
-                "reason": decision.reason,
-                "guards": dict(decision.guards),
-            })
+            recognised.append(
+                {
+                    "address": change.address,
+                    "actions": list(change.actions),
+                    "attributes": list(change.attributes),
+                    "reason": decision.reason,
+                    "guards": dict(decision.guards),
+                }
+            )
         return recognised, unsafe
 
     def _write_validation_inputs(self, root: Path, values: dict[str, str] | None) -> Path:
         path = root / ".heckle-adoption.auto.tfvars"
         if values:
             path.write_text(
-                "\n".join(f"{name} = {expression}" for name, expression in sorted(values.items())) + "\n",
+                "\n".join(f"{name} = {expression}" for name, expression in sorted(values.items()))
+                + "\n",
                 encoding="utf-8",
             )
             path.chmod(0o600)
@@ -288,15 +363,23 @@ class TfRunner:
         vars_path = self._write_validation_inputs(root, validation_inputs)
         try:
             self.run(["init", "-backend=false", "-input=false", "-no-color"], root)
-            self.run([
-                "plan", "-input=false", "-lock=false", "-no-color",
-                f"-out={plan_path.name}",
-            ], root)
+            self.run(
+                [
+                    "plan",
+                    "-input=false",
+                    "-lock=false",
+                    "-no-color",
+                    f"-out={plan_path.name}",
+                ],
+                root,
+            )
             raw = self.run(["show", "-json", plan_path.name], root)
             try:
                 payload = json.loads(raw.stdout)
             except ValueError as exc:
-                raise GenerationError(f"{self.tool_name} returned invalid JSON for the adoption safety plan") from exc
+                raise GenerationError(
+                    f"{self.tool_name} returned invalid JSON for the adoption safety plan"
+                ) from exc
             imports, noops, changes = self._plan_summary(payload)
             recognised, unsafe = self._classify_changes(changes, known_behaviour)
             if unsafe:
@@ -366,15 +449,23 @@ class TfRunner:
             self.run(["init", "-backend=false", "-input=false", "-no-color"], root)
             for address, import_id in imports:
                 self._state_import(root, address, import_id)
-            self.run([
-                "plan", "-input=false", "-lock=false", "-no-color",
-                f"-out={plan_path.name}",
-            ], root)
+            self.run(
+                [
+                    "plan",
+                    "-input=false",
+                    "-lock=false",
+                    "-no-color",
+                    f"-out={plan_path.name}",
+                ],
+                root,
+            )
             raw = self.run(["show", "-json", plan_path.name], root)
             try:
                 payload = json.loads(raw.stdout)
             except ValueError as exc:
-                raise GenerationError(f"{self.tool_name} returned invalid JSON after state-only adoption rehearsal") from exc
+                raise GenerationError(
+                    f"{self.tool_name} returned invalid JSON after state-only adoption rehearsal"
+                ) from exc
             _imports, noops, changes = self._plan_summary(payload)
             recognised, unsafe = self._classify_changes(changes, known_behaviour)
             if unsafe:
@@ -398,4 +489,3 @@ class TfRunner:
     def state_addresses(self, root: Path) -> set[str]:
         result = self.run(["state", "list"], root, managed_state=True)
         return {line.strip() for line in result.stdout.splitlines() if line.strip()}
-

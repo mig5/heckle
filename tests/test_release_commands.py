@@ -1,4 +1,5 @@
 """Exercise the Poetry-based release ordering with stand-in tools only."""
+
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ from heckle import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 
-TOOL = r'''
+TOOL = r"""
 import json, os, pathlib, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
@@ -54,43 +55,61 @@ elif name == 'qubes-gpg-client':
     print('detached signature')
 elif name == 'rpmsign':
     pathlib.Path(args[-1]).write_text(pathlib.Path(args[-1]).read_text() + '\nsigned')
-'''
+"""
 
 
 @pytest.fixture
 def release(tmp_path):
-    project = tmp_path / 'project with spaces'
+    project = tmp_path / "project with spaces"
     project.mkdir()
-    for filename in ('release.sh', 'tests.sh', 'pyproject.toml'):
+    for filename in ("release.sh", "tests.sh", "pyproject.toml"):
         shutil.copy2(ROOT / filename, project / filename)
-    tools = tmp_path / 'tools'; tools.mkdir()
-    for name in ('filedust', 'poetry', 'docker', 'qubes-gpg-client', 'rpmsign', 'sudo'):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    for name in ("filedust", "poetry", "docker", "qubes-gpg-client", "rpmsign", "sudo"):
         path = tools / name
-        if name == 'sudo':
-            path.write_text('#!/bin/sh\nexit 0\n')
+        if name == "sudo":
+            path.write_text("#!/bin/sh\nexit 0\n")
         else:
-            path.write_text(f'#!{sys.executable} -S\n' + TOOL)
+            path.write_text(f"#!{sys.executable} -S\n" + TOOL)
         path.chmod(0o755)
     env = {
         **os.environ,
-        'PATH': str(tools) + os.pathsep + os.environ['PATH'],
-        'TOOL_LOG': str(tmp_path / 'calls'),
-        'VERSION': __version__,
-        'USER': 'tester',
+        "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+        "TOOL_LOG": str(tmp_path / "calls"),
+        "VERSION": __version__,
+        "USER": "tester",
     }
+
     def run(**extra):
-        result = subprocess.run(['bash', str(project / 'release.sh')], cwd=project,
-                                env={**env, **extra}, text=True, capture_output=True)
-        log = Path(env['TOOL_LOG'])
+        result = subprocess.run(
+            ["bash", str(project / "release.sh")],
+            cwd=project,
+            env={**env, **extra},
+            text=True,
+            capture_output=True,
+        )
+        log = Path(env["TOOL_LOG"])
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return result, calls
+
     return project, run
 
 
-@pytest.mark.parametrize('stage', ['poetry:pytest', 'poetry:build', 'poetry:appimage', 'docker:build', 'docker:run', 'rpmsign', 'qubes-gpg-client'])
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "poetry:pytest",
+        "poetry:build",
+        "poetry:appimage",
+        "docker:build",
+        "docker:run",
+        "rpmsign",
+        "qubes-gpg-client",
+    ],
+)
 def test_failed_step_never_publishes(release, stage):
     _, run = release
     result, calls = run(FAIL_STAGE=stage)
     assert result.returncode != 0
-    assert not any(call_stage == 'poetry:publish' for call_stage, _ in calls)
-
+    assert not any(call_stage == "poetry:publish" for call_stage, _ in calls)

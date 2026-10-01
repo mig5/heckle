@@ -15,25 +15,65 @@ from .handlers import GitLabHandlers
 class GitLabProvider(GitLabHandlers, NativeProvider):
     spec = provider_spec("gitlab")
     HANDLERS = {
-        "group": "group", "project": "project",
-        **{kind: "scoped" for kind in (
-            "group_membership", "project_membership", "branch_protection", "tag_protection",
-            "group_hook", "project_hook", "deploy_key", "project_environment", "project_approval_rule",
-            "group_label", "project_label", "group_badge", "project_badge",
-        )},
+        "group": "group",
+        "project": "project",
+        **{
+            kind: "scoped"
+            for kind in (
+                "group_membership",
+                "project_membership",
+                "branch_protection",
+                "tag_protection",
+                "group_hook",
+                "project_hook",
+                "deploy_key",
+                "project_environment",
+                "project_approval_rule",
+                "group_label",
+                "project_label",
+                "group_badge",
+                "project_badge",
+            )
+        },
     }
     UNSUPPORTED = {
-        "group_variable": ("inventory_only", "CI variable values are redacted; variables stay outside managed HCL"),
-        "project_variable": ("inventory_only", "CI variable values are redacted; variables stay outside managed HCL"),
-        "push_rules": ("inventory_only", "The parent project hydration owns its embedded push_rules block; no duplicate resource"),
-        "pipeline_schedule": ("inventory_only", "Schedule ownership, inputs and variables need a dedicated import contract"),
-        "group_runner": ("inventory_only", "Runner registration and secret credentials are not reproduced"),
-        "project_runner": ("inventory_only", "Runner registration and secret credentials are not reproduced"),
-        "group_access_request": ("inventory_only", "Pending access requests are not active memberships"),
+        "group_variable": (
+            "inventory_only",
+            "CI variable values are redacted; variables stay outside managed HCL",
+        ),
+        "project_variable": (
+            "inventory_only",
+            "CI variable values are redacted; variables stay outside managed HCL",
+        ),
+        "push_rules": (
+            "inventory_only",
+            "The parent project hydration owns its embedded push_rules block; no duplicate resource",
+        ),
+        "pipeline_schedule": (
+            "inventory_only",
+            "Schedule ownership, inputs and variables need a dedicated import contract",
+        ),
+        "group_runner": (
+            "inventory_only",
+            "Runner registration and secret credentials are not reproduced",
+        ),
+        "project_runner": (
+            "inventory_only",
+            "Runner registration and secret credentials are not reproduced",
+        ),
+        "group_access_request": (
+            "inventory_only",
+            "Pending access requests are not active memberships",
+        ),
     }
 
-    def adjust(self, candidate: Candidate, body: Body, schema: ProviderSchema, plan: ImportPlan) -> None:
-        if candidate.resource_type == "gitlab_project" and plan.model.source.namespace_type == "user":
+    def adjust(
+        self, candidate: Candidate, body: Body, schema: ProviderSchema, plan: ImportPlan
+    ) -> None:
+        if (
+            candidate.resource_type == "gitlab_project"
+            and plan.model.source.namespace_type == "user"
+        ):
             namespace = plan.model.entities[candidate.entity.parent]
             body.attributes["namespace_id"] = hcl_literal(int(namespace.remote_id))
         if candidate.resource_type == "gitlab_project":
@@ -42,13 +82,21 @@ class GitLabProvider(GitLabHandlers, NativeProvider):
             # provider flattener copies the API cadence unconditionally, so an empty
             # API value must be represented by omission rather than cadence = "".
             for block in body.blocks:
-                if block.name == "container_expiration_policy" and literal_string(block.body.attributes.get("cadence")) == "":
+                if (
+                    block.name == "container_expiration_policy"
+                    and literal_string(block.body.attributes.get("cadence")) == ""
+                ):
                     block.body.attributes.pop("cadence", None)
-        if candidate.resource_type == "gitlab_group" and any(b.name == "default_branch_protection_defaults" for b in body.blocks):
+        if candidate.resource_type == "gitlab_group" and any(
+            b.name == "default_branch_protection_defaults" for b in body.blocks
+        ):
             body.attributes.pop("default_branch_protection", None)
         if candidate.resource_type == "gitlab_branch_protection":
             # Provider v19 represents EE ACLs as nested attributes rather than blocks.
-            for acl, fallback in (("allowed_to_push", "push_access_level"), ("allowed_to_merge", "merge_access_level")):
+            for acl, fallback in (
+                ("allowed_to_push", "push_access_level"),
+                ("allowed_to_merge", "merge_access_level"),
+            ):
                 if body.attributes.get(acl, "null").strip() not in {"null", "[]"}:
                     body.attributes.pop(fallback, None)
         if candidate.resource_type == "gitlab_tag_protection":
@@ -97,5 +145,6 @@ class GitLabProvider(GitLabHandlers, NativeProvider):
                 body.attributes.pop("rule_type", None)
             if body.attributes.get("applies_to_all_protected_branches") == "true":
                 body.attributes.pop("protected_branch_ids", None)
+
     def known_provider_behaviour(self, change: UnsafeChange):
         return known_provider_behaviour_for(self.spec, change)

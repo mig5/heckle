@@ -25,8 +25,10 @@ class ProviderSpec:
     def versions_hcl(self, *, child: bool = False) -> str:
         pin = "" if child else f'      version = "= {self.version}"\n'
         required = "" if child else f'  required_version = "{TF_VERSION_CONSTRAINT}"\n'
-        return (f'terraform {{\n{required}  required_providers {{\n    {self.local_name} = {{\n'
-                f'      source = {hcl_string(self.source)}\n{pin}    }}\n  }}\n}}\n')
+        return (
+            f"terraform {{\n{required}  required_providers {{\n    {self.local_name} = {{\n"
+            f"      source = {hcl_string(self.source)}\n{pin}    }}\n  }}\n}}\n"
+        )
 
     def configuration_hcl(self, source: Source) -> str:
         url = source.url
@@ -46,11 +48,20 @@ class ProviderAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def compile(self, plan: ImportPlan, resources: list[Resource], schema: ProviderSchema) -> CompiledProject:
+    def compile(
+        self, plan: ImportPlan, resources: list[Resource], schema: ProviderSchema
+    ) -> CompiledProject:
         raise NotImplementedError
 
     @abstractmethod
-    def render(self, project: CompiledProject, destination: Path, *, prevent_destroy: bool, split_teams: bool) -> None:
+    def render(
+        self,
+        project: CompiledProject,
+        destination: Path,
+        *,
+        prevent_destroy: bool,
+        split_teams: bool,
+    ) -> None:
         raise NotImplementedError
 
     def bootstrap_extra(self, plan: ImportPlan) -> str:

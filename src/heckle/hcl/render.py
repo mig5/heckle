@@ -9,19 +9,25 @@ from typing import Any, Iterable, Mapping, Sequence
 from heckle.hcl.types import Body, Expr, NestedBlock
 from heckle.core.compilation import Family
 
+
 def hcl_label(kind: str, source: str) -> str:
     readable = re.sub(r"[^A-Za-z0-9_]+", "_", source).strip("_").lower()
     readable = readable[:48] or "item"
     if readable[0].isdigit():
         readable = f"item_{readable}"
-    digest = hashlib.sha1(f"{kind}\0{source}".encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
+    digest = hashlib.sha1(f"{kind}\0{source}".encode("utf-8"), usedforsecurity=False).hexdigest()[
+        :10
+    ]
     return f"{readable}_{digest}"
+
 
 def hcl_string(value: Any) -> str:
     return json.dumps(str(value), ensure_ascii=False).replace("${", "$${").replace("%{", "%%{")
 
+
 def hcl_bool(value: bool) -> str:
     return "true" if value else "false"
+
 
 def hcl_list(values: Iterable[Any]) -> str:
     return "[" + ", ".join(hcl_string(value) for value in values) + "]"
@@ -36,6 +42,7 @@ def literal_string(expression: str | None) -> str | None:
         return None
     return parsed.replace("$${", "${").replace("%%{", "%{") if isinstance(parsed, str) else None
 
+
 def literal_int(expression: str | None) -> int | None:
     if expression is None:
         return None
@@ -48,6 +55,7 @@ def literal_int(expression: str | None) -> int | None:
     if isinstance(parsed, str) and parsed.isdigit():
         return int(parsed)
     return None
+
 
 def literal_list(expression: str | None) -> list[Any] | None:
     """Read literal scalar lists, including HCL's optional trailing comma.
@@ -67,7 +75,7 @@ def literal_list(expression: str | None) -> list[Any] | None:
         while index < len(text) and text[index].isspace():
             index += 1
         if index < len(text) and text[index] == "]":
-            return values if not text[index + 1:].strip() else None
+            return values if not text[index + 1 :].strip() else None
         try:
             value, end = decoder.raw_decode(text, index)
         except (ValueError, TypeError):
@@ -85,7 +93,6 @@ def literal_list(expression: str | None) -> list[Any] | None:
     return None
 
 
-
 def body_to_value(body: Body) -> "OrderedDict[str, Any]":
     result: "OrderedDict[str, Any]" = OrderedDict()
     for key, expression in body.attributes.items():
@@ -97,8 +104,10 @@ def body_to_value(body: Body) -> "OrderedDict[str, Any]":
         result["__blocks"] = grouped
     return result
 
+
 def hcl_key(key: str) -> str:
     return hcl_string(key)
+
 
 def render_expr(expr: str, indent: int) -> list[str]:
     lines = expr.splitlines() or [""]
@@ -148,6 +157,7 @@ def render_value(value: Any, indent: int = 0) -> list[str]:
         return [str(value)]
     return [hcl_string(value)]
 
+
 def body_schema(
     bodies: Sequence[Body],
 ) -> tuple[list[str], dict[str, list[Body]], set[str]]:
@@ -188,16 +198,19 @@ def body_presence_weight(body: Body) -> int:
     """Count configured attributes/blocks for deterministic profile selection."""
     return len(body.attributes) + sum(1 + body_presence_weight(block.body) for block in body.blocks)
 
+
 def safe_identifier(value: str) -> str:
     value = re.sub(r"[^A-Za-z0-9_]+", "_", value).strip("_").lower() or "item"
     if value[0].isdigit():
         value = "item_" + value
     return value
 
+
 def dynamic_iterator(path: tuple[str, ...]) -> str:
     base = safe_identifier("_".join(path))
     digest = hashlib.sha1("/".join(path).encode(), usedforsecurity=False).hexdigest()[:5]
     return f"{base}_{digest}"
+
 
 def emit_dynamic_block(
     block_name: str,
@@ -242,6 +255,7 @@ def emit_dynamic_block(
     lines.extend([f"{prefix}  }}", f"{prefix}}}"])
     return lines
 
+
 def emit_config_fields(
     family: Family,
     config_expr: str,
@@ -282,6 +296,7 @@ def emit_config_fields(
         )
     return lines
 
+
 def reindent_block(raw: str, indent: int) -> list[str]:
     raw_lines = raw.strip().splitlines()
     minimum = min(
@@ -290,7 +305,6 @@ def reindent_block(raw: str, indent: int) -> list[str]:
     )
     prefix = " " * indent
     return [prefix + line[minimum:] for line in raw_lines]
-
 
 
 def hcl_literal(value: Any) -> str:

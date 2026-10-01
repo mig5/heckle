@@ -1,4 +1,5 @@
 """Forge-neutral discovery data. No provider addresses or HCL expressions live here."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -22,7 +23,12 @@ class Source:
         kind = self.namespace_type or ("group" if self.forge == "gitlab" else "organization")
         object.__setattr__(self, "namespace_type", kind)
         allowed = {"user", "group" if self.forge == "gitlab" else "organization"}
-        if self.forge not in FORGES or not isinstance(self.scope, str) or not self.scope or kind not in allowed:
+        if (
+            self.forge not in FORGES
+            or not isinstance(self.scope, str)
+            or not self.scope
+            or kind not in allowed
+        ):
             raise GenerationError("Invalid forge, namespace type or empty discovery scope")
         if kind == "user" and ("/" in self.scope or any(c.isspace() for c in self.scope)):
             raise GenerationError("--user requires an account username, not a group path or URL")
@@ -34,9 +40,14 @@ class Source:
         return self.scope != "@me"
 
     def matches(self, other: Source) -> bool:
-        return (self.resolved and other.resolved and self.forge == other.forge
-                and self.url == other.url and self.namespace_type == other.namespace_type
-                and self.scope.casefold() == other.scope.casefold())
+        return (
+            self.resolved
+            and other.resolved
+            and self.forge == other.forge
+            and self.url == other.url
+            and self.namespace_type == other.namespace_type
+            and self.scope.casefold() == other.scope.casefold()
+        )
 
 
 @dataclass
@@ -47,6 +58,7 @@ class Entity:
     subtype (e.g. project_approval_rule). ``parent`` refers to an Entity.uid.
     Values in ``native`` are JSON data, never executable expressions.
     """
+
     kind: str
     key: str
     remote_id: str
@@ -96,7 +108,9 @@ class ForgeModel:
             "schema_version": SCHEMA_VERSION,
             "source": asdict(self.source),
             "entities": [asdict(entity) for entity in self.ordered()],
-            "observations": [asdict(o) for o in sorted(self.observations, key=lambda o: (o.scope, o.status))],
+            "observations": [
+                asdict(o) for o in sorted(self.observations, key=lambda o: (o.scope, o.status))
+            ],
             "extensions": self.extensions,
         }
 
@@ -108,7 +122,11 @@ class ForgeModel:
             source = dict(value["source"])
             if value["schema_version"] == 1 and source.get("namespace_type") == "user":
                 raise ValueError("Version-1 inventories cannot describe personal namespaces")
-            if value["schema_version"] == SCHEMA_VERSION and source.get("namespace_type") not in {"user", "organization", "group"}:
+            if value["schema_version"] == SCHEMA_VERSION and source.get("namespace_type") not in {
+                "user",
+                "organization",
+                "group",
+            }:
                 raise ValueError("Inventory is missing namespace_type")
             model = cls(Source(**source))
             if not model.source.resolved:

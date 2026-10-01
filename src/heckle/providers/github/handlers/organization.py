@@ -24,7 +24,8 @@ class OrganizationHandlers:
                 config.attributes.pop(name, None)
             if unmanaged:
                 self.model.report.setdefault("compatibility_notes", []).extend(
-                    quirk.summary for quirk in quirks_for(self.provider_spec, rtype)
+                    quirk.summary
+                    for quirk in quirks_for(self.provider_spec, rtype)
                     if quirk.kind == "unmanaged_attributes"
                 )
             organization["settings"] = body_to_value(config)
@@ -38,6 +39,10 @@ class OrganizationHandlers:
             key = self.ORG_SINGLETON_NAMES[rtype]
             config = resource.body.copy()
             if rtype == "github_actions_organization_permissions":
+                # The provider reads an absent API value as "", but its optional
+                # enum rejects an explicitly configured empty string.
+                if literal_string(config.attributes.get("allowed_actions")) == "":
+                    config.attributes.pop("allowed_actions", None)
                 removed_empty_patterns = False
                 for block in config.blocks:
                     if block.name != "allowed_actions_config":
@@ -47,7 +52,8 @@ class OrganizationHandlers:
                         removed_empty_patterns = True
                 if removed_empty_patterns:
                     self.model.report.setdefault("compatibility_notes", []).extend(
-                        quirk.summary for quirk in quirks_for(self.provider_spec, rtype)
+                        quirk.summary
+                        for quirk in quirks_for(self.provider_spec, rtype)
                         if quirk.id == "github-actions-empty-patterns"
                     )
             organization[key] = body_to_value(config)
@@ -62,15 +68,21 @@ class OrganizationHandlers:
         config = resource.body.copy()
 
         if "secret" in rtype:
-            key = literal_string(config.attributes.get("secret_name")) or str(import_id or resource.name)
+            key = literal_string(config.attributes.get("secret_name")) or str(
+                import_id or resource.name
+            )
             config.attributes.pop("secret_name", None)
             config.attributes.pop("value", None)
         elif rtype == "github_actions_organization_variable":
-            key = literal_string(config.attributes.get("variable_name")) or str(import_id or resource.name)
+            key = literal_string(config.attributes.get("variable_name")) or str(
+                import_id or resource.name
+            )
             config.attributes.pop("variable_name", None)
         elif rtype == "github_organization_webhook":
             key = str(import_id or resource.name)
-            configuration_blocks = [block for block in config.blocks if block.name == "configuration"]
+            configuration_blocks = [
+                block for block in config.blocks if block.name == "configuration"
+            ]
             if not configuration_blocks:
                 raise GenerationError(f"organization webhook {key} has no configuration block")
             url = literal_string(configuration_blocks[0].body.attributes.get("url"))
@@ -78,12 +90,12 @@ class OrganizationHandlers:
                 raise GenerationError(
                     f"organization webhook {key} has no literal URL to map to a sensitive input variable"
                 )
-            variable = webhook_variable_for(
-                self.model, scope="organization", hook_id=key, url=url
-            )
+            variable = webhook_variable_for(self.model, scope="organization", hook_id=key, url=url)
             replace_webhook_configuration_url(config, variable.name)
         elif rtype == "github_organization_custom_properties":
-            key = literal_string(config.attributes.get("property_name")) or str(import_id or resource.name)
+            key = literal_string(config.attributes.get("property_name")) or str(
+                import_id or resource.name
+            )
             config.attributes.pop("property_name", None)
         else:
             key = literal_string(config.attributes.get("name")) or str(import_id or resource.name)
@@ -95,8 +107,7 @@ class OrganizationHandlers:
             ids = literal_list(config.attributes.pop("selected_repository_ids", None))
             if ids is not None:
                 repo_keys = [
-                    self.identities["repo_id_to_name"].get(str(item), str(item))
-                    for item in ids
+                    self.identities["repo_id_to_name"].get(str(item), str(item)) for item in ids
                 ]
                 config.attributes["repository_keys"] = hcl_literal(repo_keys)
 

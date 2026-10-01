@@ -8,6 +8,7 @@ from heckle.hcl.render import emit_config_fields
 from heckle.providers.github.model.builder import compute_team_levels
 from heckle.providers.github.model.types import Model
 
+
 def emit_teams_module(model: Model) -> str:
     team_family = model.families.get("github_team")
     membership_family = model.families.get("github_team_membership")

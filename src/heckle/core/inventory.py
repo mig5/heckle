@@ -11,7 +11,9 @@ from heckle.errors import GenerationError
 def save_inventory(root: Path, model: ForgeModel) -> None:
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     write_private_json(root / "inventory.json", scrub(model.to_dict()))
-    (root / ".heckle-generated").write_text(f"Heckle inventory schema {SCHEMA_VERSION}\n", encoding="utf-8")
+    (root / ".heckle-generated").write_text(
+        f"Heckle inventory schema {SCHEMA_VERSION}\n", encoding="utf-8"
+    )
 
 
 def load_inventory(path: Path) -> ForgeModel:

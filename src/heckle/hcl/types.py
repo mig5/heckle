@@ -4,12 +4,14 @@ import dataclasses
 from collections import OrderedDict
 from pathlib import Path
 
+
 @dataclasses.dataclass
 class DomainLexState:
     in_string: bool = False
     in_block_comment: bool = False
     heredoc_delimiter: str | None = None
     heredoc_allow_indent: bool = False
+
 
 @dataclasses.dataclass
 class TopBlock:
@@ -26,6 +28,7 @@ class TopBlock:
             return f"{self.resource_type}.{self.resource_name}"
         return None
 
+
 @dataclasses.dataclass
 class Body:
     attributes: "OrderedDict[str, str]" = dataclasses.field(default_factory=OrderedDict)
@@ -40,12 +43,14 @@ class Body:
             ],
         )
 
+
 @dataclasses.dataclass
 class NestedBlock:
     name: str
     labels: tuple[str, ...]
     body: Body
     raw: str
+
 
 @dataclasses.dataclass
 class Resource:
@@ -59,7 +64,7 @@ class Resource:
     def address(self) -> str:
         return f"{self.resource_type}.{self.name}"
 
+
 @dataclasses.dataclass(frozen=True)
 class Expr:
     value: str
-

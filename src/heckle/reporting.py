@@ -1,4 +1,5 @@
 """Report discovery separately from provider mapping and configuration generation."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -14,21 +15,36 @@ from heckle.providers.base import ProviderSpec
 from heckle.compatibility import compatibility_summary
 
 
-def generation_report(plan: ImportPlan, spec: ProviderSpec, *, generated: bool = False, validated: bool = False,
-                      imported_addresses: int = 0, project: CompiledProject | None = None) -> dict[str, Any]:
+def generation_report(
+    plan: ImportPlan,
+    spec: ProviderSpec,
+    *,
+    generated: bool = False,
+    validated: bool = False,
+    imported_addresses: int = 0,
+    project: CompiledProject | None = None,
+) -> dict[str, Any]:
     provider = plan.coverage.to_dict()
     if generated:
         for item in provider["items"]:
             if item["status"] == "import_planned":
                 item["status"] = "configuration_generated"
-        provider["counts"] = dict(sorted(Counter(item["status"] for item in provider["items"]).items()))
+        provider["counts"] = dict(
+            sorted(Counter(item["status"] for item in provider["items"]).items())
+        )
     report = {
-        "report_version": 1, "heckle_version": __version__,
+        "report_version": 1,
+        "heckle_version": __version__,
         "source": asdict(plan.model.source),
         "provider": {"source": spec.source, "version": spec.version},
         "provider_compatibility": compatibility_summary(spec),
-        "inventory_counts": dict(sorted(Counter(entity.native_kind for entity in plan.model.ordered()).items())),
-        "discovery": [asdict(observation) for observation in sorted(plan.model.observations, key=lambda o: (o.scope, o.status))],
+        "inventory_counts": dict(
+            sorted(Counter(entity.native_kind for entity in plan.model.ordered()).items())
+        ),
+        "discovery": [
+            asdict(observation)
+            for observation in sorted(plan.model.observations, key=lambda o: (o.scope, o.status))
+        ],
         "coverage": provider,
         "validation": "passed" if validated else "not_run",
         "state_changes_performed": False,
@@ -40,12 +56,16 @@ def generation_report(plan: ImportPlan, spec: ProviderSpec, *, generated: bool =
         if project.native is not None:
             report["native_report"] = project.native.report
             report["required_private_inputs"] = sorted(project.native.webhook_variables)
-        report["ignored_attributes"] = {item.address: sorted(item.ignored) for item in project.resources if item.ignored}
+        report["ignored_attributes"] = {
+            item.address: sorted(item.ignored) for item in project.resources if item.ignored
+        }
     return report
 
 
 def read_report(path: Path) -> dict[str, Any]:
-    candidates = [path] if path.is_file() else [path / ".generation" / "report.json", path / "report.json"]
+    candidates = (
+        [path] if path.is_file() else [path / ".generation" / "report.json", path / "report.json"]
+    )
     for candidate in candidates:
         if candidate.is_file():
             try:
@@ -77,5 +97,12 @@ def format_report(report: dict[str, Any]) -> str:
         lines.extend(["", f"Provider compatibility: {status}"])
         for quirk in compatibility.get("quirks", []):
             lines.append(f"  {quirk['id']}: {quirk['summary']}")
-    lines.extend(["", f"Validation: {report['validation']}", "Heckle never applies a plan or persists managed state; any state-only imports used for adoption safety checks are disposable.", report["scope_note"]])
+    lines.extend(
+        [
+            "",
+            f"Validation: {report['validation']}",
+            "Heckle never applies a plan or persists managed state; any state-only imports used for adoption safety checks are disposable.",
+            report["scope_note"],
+        ]
+    )
     return "\n".join(lines)

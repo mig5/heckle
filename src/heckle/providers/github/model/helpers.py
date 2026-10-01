@@ -11,9 +11,8 @@ from heckle.hcl.render import literal_string
 from heckle.hcl.types import Body, Expr, Resource
 from heckle.providers.github.model.types import Model, WebhookVariable
 
-def get_or_create(
-    mapping: MutableMapping[str, Any], key: str
-) -> MutableMapping[str, Any]:
+
+def get_or_create(mapping: MutableMapping[str, Any], key: str) -> MutableMapping[str, Any]:
     value = mapping.get(key)
     if value is None:
         value = OrderedDict()
@@ -21,6 +20,7 @@ def get_or_create(
     if not isinstance(value, MutableMapping):
         raise GenerationError(f"model collision at {key}")
     return value
+
 
 def unique_key(mapping: Mapping[str, Any], proposed: str, suffix: str) -> str:
     if proposed not in mapping:
@@ -31,15 +31,18 @@ def unique_key(mapping: Mapping[str, Any], proposed: str, suffix: str) -> str:
     digest = hashlib.sha1(suffix.encode(), usedforsecurity=False).hexdigest()[:8]
     return f"{proposed}#{digest}"
 
+
 def strip_attrs(body: Body, names: Iterable[str]) -> Body:
     result = body.copy()
     for name in names:
         result.attributes.pop(name, None)
     return result
 
+
 def webhook_identifier(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
     return cleaned or "webhook"
+
 
 def webhook_service(url: str) -> str:
     """Derive a stable provider-neutral label from the webhook hostname."""
@@ -48,9 +51,8 @@ def webhook_service(url: str) -> str:
         return webhook_identifier(hostname.removeprefix("www."))
     return "webhook"
 
-def webhook_variable_for(
-    model: Model, *, scope: str, hook_id: str, url: str
-) -> WebhookVariable:
+
+def webhook_variable_for(model: Model, *, scope: str, hook_id: str, url: str) -> WebhookVariable:
     """Return a deterministic, organization-agnostic variable for a webhook URL."""
     service = webhook_service(url)
     scope_name = "organization" if scope == "organization" else webhook_identifier(scope)
@@ -76,6 +78,7 @@ def webhook_variable_for(
     model.webhook_variables[name] = variable
     return variable
 
+
 def replace_webhook_configuration_url(config: Body, variable_name: str) -> None:
     configurations = [block for block in config.blocks if block.name == "configuration"]
     if not configurations:
@@ -83,10 +86,10 @@ def replace_webhook_configuration_url(config: Body, variable_name: str) -> None:
     for configuration in configurations:
         configuration.body.attributes["url"] = f"var.{variable_name}"
 
+
 def add_body_family(model: Model, resource: Resource, body: Body | None = None) -> None:
-    model.family(resource.resource_type).add(
-        body or resource.body, resource.lifecycle_raw
-    )
+    model.family(resource.resource_type).add(body or resource.body, resource.lifecycle_raw)
+
 
 def model_string(value: Any) -> str | None:
     if isinstance(value, Expr):
@@ -95,19 +98,16 @@ def model_string(value: Any) -> str | None:
         return value
     return None
 
+
 def compute_team_levels(model: Model) -> dict[str, int]:
     parents: dict[str, str | None] = {}
     for slug, team in model.teams.items():
         settings = team.get("settings", {}) if isinstance(team, Mapping) else {}
         parent = (
-            model_string(settings.get("parent_team_key"))
-            if isinstance(settings, Mapping)
-            else None
+            model_string(settings.get("parent_team_key")) if isinstance(settings, Mapping) else None
         )
         if parent and parent not in model.teams:
-            raise GenerationError(
-                f"team {slug!r} refers to unknown parent team {parent!r}"
-            )
+            raise GenerationError(f"team {slug!r} refers to unknown parent team {parent!r}")
         parents[slug] = parent
 
     levels: dict[str, int] = {}
@@ -130,6 +130,7 @@ def compute_team_levels(model: Model) -> dict[str, int]:
         visit(slug)
     return levels
 
+
 def rewrite_team_import_levels(model: Model, levels: Mapping[str, int]) -> None:
     pattern = re.compile(r"^module\.teams\.github_team\.this\[(?P<key>.+)\]$")
     for record in model.imports:
@@ -141,10 +142,7 @@ def rewrite_team_import_levels(model: Model, levels: Mapping[str, int]) -> None:
         try:
             slug = json.loads(match.group("key"))
         except json.JSONDecodeError as exc:
-            raise GenerationError(
-                f"invalid team import address: {record.new_address}"
-            ) from exc
+            raise GenerationError(f"invalid team import address: {record.new_address}") from exc
         record.new_address = (
-            f"module.teams.github_team.level_{levels[str(slug)]}"
-            f"[{hcl_literal(str(slug))}]"
+            f"module.teams.github_team.level_{levels[str(slug)]}" f"[{hcl_literal(str(slug))}]"
         )

@@ -29,23 +29,27 @@ def test_provider_pins_are_explicitly_audited():
         assert compatibility_summary(spec)["audited"] is True
 
 
-
-
 def test_gitlab_audited_resource_scope_matches_managed_adapter():
     spec = provider_spec("gitlab")
     managed = {
-        "gitlab_group" if kind == "group" else
-        "gitlab_project" if kind == "project" else
-        f"gitlab_{kind}"
+        (
+            "gitlab_group"
+            if kind == "group"
+            else "gitlab_project" if kind == "project" else f"gitlab_{kind}"
+        )
         for kind in GitLabProvider.HANDLERS
     }
     assert audited_resource_types(spec) == managed
     assert compatibility_summary(spec)["audited_resource_types"] == sorted(managed)
 
 
-@pytest.mark.parametrize("forge,provider", [
-    ("gitea", GiteaProvider), ("forgejo", ForgejoProvider),
-])
+@pytest.mark.parametrize(
+    "forge,provider",
+    [
+        ("gitea", GiteaProvider),
+        ("forgejo", ForgejoProvider),
+    ],
+)
 def test_native_audited_resource_scope_matches_managed_adapter(forge, provider):
     spec = provider_spec(forge)
     managed = provider.MANAGED_RESOURCE_TYPES
@@ -57,10 +61,16 @@ def test_github_audit_scope_covers_every_planned_resource_family():
     # The source-level 6.13.0 audit covers every family emitted by the native
     # builder, including conditional families absent from small fixtures.
     required = {
-        "github_repository", "github_repository_pages", "github_repository_ruleset",
-        "github_organization_settings", "github_organization_ruleset", "github_team",
-        "github_actions_repository_permissions", "github_repository_environment",
-        "github_repository_webhook", "github_actions_secret",
+        "github_repository",
+        "github_repository_pages",
+        "github_repository_ruleset",
+        "github_organization_settings",
+        "github_organization_ruleset",
+        "github_team",
+        "github_actions_repository_permissions",
+        "github_repository_environment",
+        "github_repository_webhook",
+        "github_actions_secret",
     }
     assert required <= audited_resource_types(spec)
 
@@ -69,12 +79,17 @@ def test_gitea_create_destroy_and_parent_controlled_fields_are_recorded():
     spec = provider_spec("gitea")
     assert "repo_admin_change_team_access" in unmanaged_attributes(spec, "gitea_org")
     assert {
-        "archive_on_destroy", "allow_manual_merge", "autodetect_manual_merge",
+        "archive_on_destroy",
+        "allow_manual_merge",
+        "autodetect_manual_merge",
     } <= unmanaged_attributes(spec, "gitea_repository")
     assert any(
         q.id == "gitea-team-import-update-unsafe" and q.kind == "warning"
-        for q in __import__("heckle.compatibility", fromlist=["quirks_for"]).quirks_for(spec, "gitea_team")
+        for q in __import__("heckle.compatibility", fromlist=["quirks_for"]).quirks_for(
+            spec, "gitea_team"
+        )
     )
+
 
 def test_unaudited_provider_override_requires_explicit_opt_in(tmp_path):
     with pytest.raises(GenerationError, match="has not been audited"):
@@ -122,7 +137,9 @@ def test_github_coupled_repository_creation_flags_are_unmanaged(tmp_path):
     assert "billing_email" in settings
     for name in unmanaged_attributes(provider_spec("github"), "github_organization_settings"):
         assert name not in settings
-    assert any("repository-creation booleans" in note for note in model.report["compatibility_notes"])
+    assert any(
+        "repository-creation booleans" in note for note in model.report["compatibility_notes"]
+    )
 
 
 def test_github_empty_actions_patterns_are_not_enforced(tmp_path):
@@ -169,7 +186,9 @@ def test_gitlab_create_and_destroy_control_fields_are_unmanaged():
         "forked_from_project_id",
         "mr_default_target_self",
     } <= unmanaged_attributes(spec, "gitlab_project")
-    assert {"archive_on_destroy", "permanently_remove_on_delete"} <= unmanaged_attributes(spec, "gitlab_group")
+    assert {"archive_on_destroy", "permanently_remove_on_delete"} <= unmanaged_attributes(
+        spec, "gitlab_group"
+    )
 
 
 def test_gitlab_known_pipeline_behaviour_is_recognised_under_guard():
@@ -206,6 +225,7 @@ def test_gitlab_merge_train_behaviour_is_not_recognised_when_guard_changes():
 
 def test_gitlab_empty_reviewer_strategy_is_version_scoped_compatibility():
     from heckle.compatibility import empty_string_unset_attributes, provider_spec
+
     assert "reviewer_assignment_strategy" in empty_string_unset_attributes(
         provider_spec("gitlab"), "gitlab_project"
     )
@@ -213,49 +233,95 @@ def test_gitlab_empty_reviewer_strategy_is_version_scoped_compatibility():
 
 def test_gitlab_membership_empty_expiry_is_version_scoped_compatibility():
     from heckle.compatibility import empty_string_unset_attributes, provider_spec
+
     spec = provider_spec("gitlab")
     assert "expires_at" in empty_string_unset_attributes(spec, "gitlab_project_membership")
     assert "expires_at" in empty_string_unset_attributes(spec, "gitlab_group_membership")
 
 
 def test_gitlab_systematic_audit_rules_are_version_scoped():
-    from heckle.compatibility import empty_string_unset_attributes, provider_spec, unmanaged_attributes, quirks_for
+    from heckle.compatibility import (
+        empty_string_unset_attributes,
+        provider_spec,
+        unmanaged_attributes,
+        quirks_for,
+    )
+
     spec = provider_spec("gitlab")
-    assert {"skip_subresources_on_destroy", "unassign_issuables_on_destroy"} <= unmanaged_attributes(spec, "gitlab_group_membership")
+    assert {
+        "skip_subresources_on_destroy",
+        "unassign_issuables_on_destroy",
+    } <= unmanaged_attributes(spec, "gitlab_group_membership")
     assert "push_rules" in unmanaged_attributes(spec, "gitlab_group")
     assert "stop_before_destroy" in unmanaged_attributes(spec, "gitlab_project_environment")
-    assert {"external_url", "tier", "kubernetes_namespace", "flux_resource_path", "auto_stop_setting"} <= empty_string_unset_attributes(spec, "gitlab_project_environment")
+    assert {
+        "external_url",
+        "tier",
+        "kubernetes_namespace",
+        "flux_resource_path",
+        "auto_stop_setting",
+    } <= empty_string_unset_attributes(spec, "gitlab_project_environment")
     environment_quirks = {q.id for q in quirks_for(spec, "gitlab_project_environment")}
     assert "gitlab-environment-cluster-field-dependencies" in environment_quirks
     assert "branch_filter_strategy" in empty_string_unset_attributes(spec, "gitlab_project_hook")
     assert "branch_filter_strategy" in empty_string_unset_attributes(spec, "gitlab_group_hook")
     assert "report_type" in empty_string_unset_attributes(spec, "gitlab_project_approval_rule")
-    assert "disable_importing_default_any_approver_rule_on_create" in unmanaged_attributes(spec, "gitlab_project_approval_rule")
+    assert "disable_importing_default_any_approver_rule_on_create" in unmanaged_attributes(
+        spec, "gitlab_project_approval_rule"
+    )
     assert {
-        "visibility_level", "merge_method", "resource_group_default_process_mode",
-        "squash_option", "pages_access_level", "ci_pipeline_variables_minimum_override_role",
-        "analytics_access_level", "auto_cancel_pending_pipelines",
-        "auto_devops_deploy_strategy", "build_git_strategy", "builds_access_level",
-        "container_registry_access_level", "forking_access_level", "issues_access_level",
-        "merge_requests_access_level", "repository_access_level", "requirements_access_level",
-        "reviewer_assignment_strategy", "security_and_compliance_access_level",
-        "snippets_access_level", "wiki_access_level", "releases_access_level",
-        "environments_access_level", "feature_flags_access_level",
-        "infrastructure_access_level", "monitor_access_level",
-        "model_experiments_access_level", "model_registry_access_level",
+        "visibility_level",
+        "merge_method",
+        "resource_group_default_process_mode",
+        "squash_option",
+        "pages_access_level",
+        "ci_pipeline_variables_minimum_override_role",
+        "analytics_access_level",
+        "auto_cancel_pending_pipelines",
+        "auto_devops_deploy_strategy",
+        "build_git_strategy",
+        "builds_access_level",
+        "container_registry_access_level",
+        "forking_access_level",
+        "issues_access_level",
+        "merge_requests_access_level",
+        "repository_access_level",
+        "requirements_access_level",
+        "reviewer_assignment_strategy",
+        "security_and_compliance_access_level",
+        "snippets_access_level",
+        "wiki_access_level",
+        "releases_access_level",
+        "environments_access_level",
+        "feature_flags_access_level",
+        "infrastructure_access_level",
+        "monitor_access_level",
+        "model_experiments_access_level",
+        "model_registry_access_level",
         "package_registry_access_level",
     } <= empty_string_unset_attributes(spec, "gitlab_project")
     assert {
-        "visibility_level", "project_creation_level", "subgroup_creation_level",
-        "wiki_access_level", "shared_runners_setting",
+        "visibility_level",
+        "project_creation_level",
+        "subgroup_creation_level",
+        "wiki_access_level",
+        "shared_runners_setting",
     } <= empty_string_unset_attributes(spec, "gitlab_group")
-    assert {"merge_access_level", "push_access_level"} <= empty_string_unset_attributes(spec, "gitlab_branch_protection")
-    hook_quirks = {q.id for rtype in ("gitlab_project_hook", "gitlab_group_hook") for q in quirks_for(spec, rtype)}
+    assert {"merge_access_level", "push_access_level"} <= empty_string_unset_attributes(
+        spec, "gitlab_branch_protection"
+    )
+    hook_quirks = {
+        q.id
+        for rtype in ("gitlab_project_hook", "gitlab_group_hook")
+        for q in quirks_for(spec, rtype)
+    }
     assert "gitlab-project-hook-all-branches-filter" in hook_quirks
     assert "gitlab-group-hook-all-branches-filter" in hook_quirks
     membership_warnings = {
-        q.id for rtype in ("gitlab_project_membership", "gitlab_group_membership")
-        for q in quirks_for(spec, rtype) if q.kind == "warning"
+        q.id
+        for rtype in ("gitlab_project_membership", "gitlab_group_membership")
+        for q in quirks_for(spec, rtype)
+        if q.kind == "warning"
     }
     assert {
         "gitlab-project-membership-custom-role-update",
@@ -270,8 +336,49 @@ def test_gitlab_systematic_audit_rules_are_version_scoped():
     assert "gitlab-tag-protection-selector-normalization" in tag_quirks
     assert "expires_at" in empty_string_unset_attributes(spec, "gitlab_deploy_key")
     assert {
-        "initialize_with_readme", "import_url", "import_url_username", "import_url_password",
-        "use_custom_template", "template_name", "template_project_id",
-        "group_with_project_templates_id", "avatar", "avatar_hash", "branches",
+        "initialize_with_readme",
+        "import_url",
+        "import_url_username",
+        "import_url_password",
+        "use_custom_template",
+        "template_name",
+        "template_project_id",
+        "group_with_project_templates_id",
+        "avatar",
+        "avatar_hash",
+        "branches",
     } <= unmanaged_attributes(spec, "gitlab_project")
     assert {"avatar", "avatar_hash"} <= unmanaged_attributes(spec, "gitlab_group")
+
+
+@pytest.mark.parametrize("enabled", ["all", "none", "selected"])
+@pytest.mark.parametrize("allowed", ['""', '"all"', '"local_only"', '"selected"', "null", None])
+def test_github_organization_allowed_actions_normalization(tmp_path, enabled, allowed):
+    from heckle.providers.github.renderers.organization import emit_organization_module
+
+    _github_inventory(tmp_path)
+    attributes = OrderedDict(enabled_repositories=f'"{enabled}"')
+    if allowed is not None:
+        attributes["allowed_actions"] = allowed
+    resource = Resource(
+        "github_actions_organization_permissions",
+        "example",
+        Body(attributes),
+        None,
+        tmp_path / "generated.tf",
+    )
+    model = DomainModelBuilder("example", tmp_path).build(
+        [resource],
+        [ImportRecord(resource.address, "example")],
+    )
+    config = model.organization["actions_permissions"]
+    rendered = emit_organization_module(model)
+    if allowed in ('""', None):
+        assert "allowed_actions" not in config
+        assert "allowed_actions" not in rendered
+    else:
+        assert config["allowed_actions"].value == allowed
+        assert "var.organization.actions_permissions.allowed_actions" in rendered
+    assert config["enabled_repositories"].value == f'"{enabled}"'
+    # Normalization must not mutate the original hydrated resource.
+    assert resource.body.attributes.get("allowed_actions") == allowed

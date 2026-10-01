@@ -9,16 +9,12 @@ REPO_FAMILY_META: dict[str, dict[str, Any]] = {
     "github_branch_default": {
         "path": "default_branch",
         "depth": 0,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
     },
     "github_repository_pages": {
         "path": "pages",
         "depth": 0,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
     },
     "github_repository_collaborator": {
         "path": "collaborators",
@@ -41,17 +37,13 @@ REPO_FAMILY_META: dict[str, dict[str, Any]] = {
     "github_repository_ruleset": {
         "path": "rulesets",
         "depth": 1,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
         "special_ruleset": True,
     },
     "github_actions_repository_permissions": {
         "path": "actions.permissions",
         "depth": 0,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
     },
     "github_actions_variable": {
         "path": "actions.variables",
@@ -113,24 +105,18 @@ REPO_FAMILY_META: dict[str, dict[str, Any]] = {
     "github_repository_webhook": {
         "path": "webhooks",
         "depth": 1,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
         "webhook": True,
     },
     "github_repository_deploy_key": {
         "path": "deploy_keys",
         "depth": 1,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
     },
     "github_repository_autolink_reference": {
         "path": "autolinks",
         "depth": 1,
-        "association": [
-            "repository = github_repository.this[each.value.repository_key].name"
-        ],
+        "association": ["repository = github_repository.this[each.value.repository_key].name"],
     },
     "github_repository_custom_property": {
         "path": "custom_properties",
@@ -142,6 +128,7 @@ REPO_FAMILY_META: dict[str, dict[str, Any]] = {
     },
 }
 
+
 def traversal(path: str, root: str) -> str:
     value = root
     for part in path.split("."):
@@ -149,6 +136,7 @@ def traversal(path: str, root: str) -> str:
             raise ValueError("wildcard traversal requires special handling")
         value += f".{part}"
     return value
+
 
 def emit_repo_flatten_local(rtype: str, meta: Mapping[str, Any]) -> tuple[str, str]:
     local_name = safe_identifier(rtype.removeprefix("github_"))
@@ -207,6 +195,7 @@ def emit_repo_flatten_local(rtype: str, meta: Mapping[str, Any]) -> tuple[str, s
             ]
         )
     return local_name, text
+
 
 def emit_repository_module(model: Model, prevent_destroy: bool) -> str:
     repo_family = model.families.get("github_repository")
@@ -286,9 +275,7 @@ def emit_repository_module(model: Model, prevent_destroy: bool) -> str:
             exclude = {"manage_name", "observed_name"} if special_ruleset else set()
             config_family = family
             lines.extend(
-                emit_config_fields(
-                    config_family, "each.value.config", 2, exclude_attrs=exclude
-                )
+                emit_config_fields(config_family, "each.value.config", 2, exclude_attrs=exclude)
             )
             if meta.get("secret"):
                 lines.extend(
@@ -325,7 +312,9 @@ def emit_repository_module(model: Model, prevent_destroy: bool) -> str:
     if repo_family:
         names_value = "{ for key, repository in github_repository.this : key => repository.name }"
         ids_value = "{ for key, repository in github_repository.this : key => repository.repo_id }"
-        node_ids_value = "{ for key, repository in github_repository.this : key => repository.node_id }"
+        node_ids_value = (
+            "{ for key, repository in github_repository.this : key => repository.node_id }"
+        )
     else:
         names_value = ids_value = node_ids_value = "{}"
 

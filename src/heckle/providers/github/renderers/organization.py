@@ -20,6 +20,7 @@ ORG_SINGLETON_META = {
     "github_actions_organization_workflow_permissions": "actions_workflow_permissions",
 }
 
+
 def emit_organization_module(model: Model) -> str:
     lines = [
         'variable "organization" {',
@@ -103,9 +104,7 @@ def emit_organization_module(model: Model) -> str:
                     ]
                 )
             exclude = {"repository_keys", "manage_name", "observed_name"}
-            lines.extend(
-                emit_config_fields(family, "each.value", 2, exclude_attrs=exclude)
-            )
+            lines.extend(emit_config_fields(family, "each.value", 2, exclude_attrs=exclude))
             if rtype in {
                 "github_actions_organization_secret",
                 "github_dependabot_organization_secret",
@@ -132,9 +131,7 @@ def emit_organization_module(model: Model) -> str:
                     ]
                 )
             elif special_ruleset and resource_name == "legacy_name":
-                lines.extend(
-                    ["", "  lifecycle {", "    ignore_changes = [name]", "  }"]
-                )
+                lines.extend(["", "  lifecycle {", "    ignore_changes = [name]", "  }"])
             elif family.lifecycle_raw:
                 lines.append("")
                 lines.extend(reindent_block(family.lifecycle_raw, 2))

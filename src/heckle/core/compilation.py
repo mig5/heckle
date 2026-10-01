@@ -3,16 +3,19 @@ import dataclasses
 from heckle.errors import GenerationError
 from heckle.hcl.types import Body
 
+
 def _normalize_block(raw: str | None) -> str | None:
     if raw is None:
         return None
     return "\n".join(line.rstrip() for line in raw.strip().splitlines())
+
 
 @dataclasses.dataclass
 class ImportRecord:
     old_address: str
     import_id: str
     new_address: str | None = None
+
 
 @dataclasses.dataclass
 class Family:
@@ -24,11 +27,10 @@ class Family:
         normalized = _normalize_block(lifecycle_raw)
         current = _normalize_block(self.lifecycle_raw)
         if self.samples and normalized != current:
-            raise GenerationError(
-                f"{self.resource_type} instances have differing lifecycle blocks"
-            )
+            raise GenerationError(f"{self.resource_type} instances have differing lifecycle blocks")
         self.samples.append(body)
         self.lifecycle_raw = lifecycle_raw
+
 
 # Provider-native compilation is deliberately separate from the forge-neutral model.
 from typing import Any
@@ -63,11 +65,13 @@ class Candidate:
         if self.flat_override:
             return self.flat_override
         from heckle.hcl.render import hcl_label
+
         return f"{self.resource_type}.{hcl_label(self.resource_type, self.entity.uid)}"
 
     @property
     def address(self) -> str:
         from heckle.hcl.render import hcl_string
+
         return f"module.{self.module}.{self.resource_type}.this[{hcl_string(self.key)}]"
 
 
@@ -81,6 +85,7 @@ class ImportPlan:
 
     def validate(self) -> None:
         from heckle.errors import GenerationError
+
         for field in ("address", "flat_address"):
             values = [getattr(c, field) for c in self.candidates]
             if len(values) != len(set(values)):
@@ -100,6 +105,7 @@ class CompiledResource:
     @property
     def address(self) -> str:
         from heckle.hcl.render import hcl_string
+
         return (
             f"module.{self.candidate.module}.{self.candidate.resource_type}."
             f"{self.resource_name}[{hcl_string(self.candidate.key)}]"
@@ -146,8 +152,10 @@ class CompiledProject:
             )
             primary = ranked[0][0]
             for signature, items in groups.items():
-                name = "this" if signature == primary else (
-                    "profile_" + hashlib.sha256(repr(signature).encode()).hexdigest()[:10]
+                name = (
+                    "this"
+                    if signature == primary
+                    else ("profile_" + hashlib.sha256(repr(signature).encode()).hexdigest()[:10])
                 )
                 for item in items:
                     item.resource_name = name

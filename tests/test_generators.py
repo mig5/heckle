@@ -1,13 +1,18 @@
 from collections import OrderedDict
 
-from heckle.providers.github.renderers.common import provider_pins_literal_owner, unique_render_names
+from heckle.providers.github.renderers.common import (
+    provider_pins_literal_owner,
+    unique_render_names,
+)
 from heckle.providers.github.renderers.project import emit_webhook_variables
 from heckle.providers.github.model.types import Model, WebhookVariable
 
 
 def test_provider_owner_is_literal():
     assert provider_pins_literal_owner('provider "github" {\n  owner = "acme"\n}\n', "acme")
-    assert not provider_pins_literal_owner('provider "github" {\n  owner = var.github_org\n}\n', "acme")
+    assert not provider_pins_literal_owner(
+        'provider "github" {\n  owner = var.github_org\n}\n', "acme"
+    )
 
 
 def test_render_name_collisions_are_disambiguated():
@@ -19,11 +24,15 @@ def test_render_name_collisions_are_disambiguated():
 def test_webhook_variable_has_no_empty_default():
     model = Model(org="acme")
     model.webhook_variables["webhook_org_example_1"] = WebhookVariable(
-        name="webhook_org_example_1", description="Webhook URL", scope="organization", hook_id="1", value="https://example.test/hook"
+        name="webhook_org_example_1",
+        description="Webhook URL",
+        scope="organization",
+        hook_id="1",
+        value="https://example.test/hook",
     )
     text = emit_webhook_variables(model)
-    assert 'sensitive   = true' in text
-    assert 'default' not in text
+    assert "sensitive   = true" in text
+    assert "default" not in text
 
 
 def test_empty_model_modules_still_export_required_outputs():
@@ -34,10 +43,10 @@ def test_empty_model_modules_still_export_required_outputs():
     model = Model(org="empty")
     assert 'output "usernames"' in emit_members_module(model)
     teams = emit_teams_module(model)
-    assert 'team_ids      = {}' in teams
+    assert "team_ids      = {}" in teams
     assert 'output "ids"' in teams
     repositories = emit_repository_module(model, prevent_destroy=True)
-    assert 'value = {}' in repositories
+    assert "value = {}" in repositories
 
 
 def test_github_provider_enables_parallel_requests():

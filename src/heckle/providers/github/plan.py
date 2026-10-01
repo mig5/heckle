@@ -20,8 +20,10 @@ def secret_lifecycle(*, indent: str, extra_ignored: Iterable[str] = ()) -> str:
 {indent}  ]
 {indent}}}"""
 
+
 class GitHubPlanBuilder:
     """Provider import contracts are built from inventory, never from live API calls."""
+
     def __init__(self, org: str) -> None:
         self.org = org
         self.imports: list[tuple[str, str]] = []
@@ -111,9 +113,7 @@ class GitHubPlanBuilder:
             self.add_import(allowlist_type, name, name)
 
     def add_repository_secret(self, kind: str, repo: str, secret_name: str) -> None:
-        resource_type = (
-            "github_actions_secret" if kind == "actions" else "github_dependabot_secret"
-        )
+        resource_type = "github_actions_secret" if kind == "actions" else "github_dependabot_secret"
         label = self.add_import(
             resource_type,
             f"{repo}:{secret_name}",
@@ -132,9 +132,7 @@ class GitHubPlanBuilder:
 """
         self.add_manual_resource(resource_type, block)
 
-    def add_environment_secret(
-        self, repo: str, environment: str, secret_name: str
-    ) -> None:
+    def add_environment_secret(self, repo: str, environment: str, secret_name: str) -> None:
         resource_type = "github_actions_environment_secret"
         import_id = f"{repo}:{escape_colons(environment)}:{secret_name}"
         label = self.add_import(
@@ -197,6 +195,7 @@ class GitHubPlanBuilder:
     def _organization(self, inventory: Path, active: set[str]) -> None:
         def load(name: str, default: Any = None) -> Any:
             return read_json(inventory / name, default)
+
         organization = load("organization.json", {})
         self.add_import("github_organization_settings", self.org, str(organization["id"]))
         for member in load("memberships.json", []):
@@ -214,21 +213,37 @@ class GitHubPlanBuilder:
                 if not username:
                     raise ValueError(f"Team membership in {slug} is missing a username")
                 if member.get("state", "active") == "active":
-                    self.add_import("github_team_membership", f"{remote_id}:{username}", f"{remote_id}:{username}")
+                    self.add_import(
+                        "github_team_membership",
+                        f"{remote_id}:{username}",
+                        f"{remote_id}:{username}",
+                    )
             for repo in load(f"teams/{slug}/repositories.json", []):
                 if repo["name"] in active:
-                    self.add_import("github_team_repository", f"{remote_id}:{repo['name']}", f"{remote_id}:{repo['name']}")
+                    self.add_import(
+                        "github_team_repository",
+                        f"{remote_id}:{repo['name']}",
+                        f"{remote_id}:{repo['name']}",
+                    )
         for filename, rtype, field in (
             ("organization-rulesets.json", "github_organization_ruleset", "id"),
             ("custom-organization-roles.json", "github_organization_role", "id"),
-            ("custom-properties/schema.json", "github_organization_custom_properties", "property_name"),
+            (
+                "custom-properties/schema.json",
+                "github_organization_custom_properties",
+                "property_name",
+            ),
             ("actions/organization-variables.json", "github_actions_organization_variable", "name"),
         ):
             for item in load(filename, []):
-                value = str(item[field]); self.add_import(rtype, value, value)
+                value = str(item[field])
+                self.add_import(rtype, value, value)
         for filename, rtype in (
             ("actions/organization-permissions.json", "github_actions_organization_permissions"),
-            ("actions/organization-workflow-permissions.json", "github_actions_organization_workflow_permissions"),
+            (
+                "actions/organization-workflow-permissions.json",
+                "github_actions_organization_workflow_permissions",
+            ),
         ):
             if load(filename) is not None:
                 self.add_import(rtype, self.org, self.org)
@@ -241,6 +256,7 @@ class GitHubPlanBuilder:
     def build(self, inventory: Path, *, personal: bool = False) -> GitHubPlanBuilder:
         def load(name: str, default: Any = None) -> Any:
             return read_json(inventory / name, default)
+
         repositories = [r for r in load("repositories.json", []) if not r.get("archived")]
         if not personal:
             self._organization(inventory, {r["name"] for r in repositories})
@@ -257,7 +273,10 @@ class GitHubPlanBuilder:
                 ("autolinks", "github_repository_autolink_reference", "id", "/"),
             ):
                 for item in load(f"{prefix}/{filename}.json", []):
-                    if filename == "rulesets" and (item.get("source_type", "Repository") != "Repository" or item.get("source", repo) not in {repo, f"{self.org}/{repo}"}):
+                    if filename == "rulesets" and (
+                        item.get("source_type", "Repository") != "Repository"
+                        or item.get("source", repo) not in {repo, f"{self.org}/{repo}"}
+                    ):
                         continue
                     value = str(item[field])
                     self.add_import(rtype, f"{repo}:{value}", f"{repo}{separator}{value}")
@@ -266,7 +285,11 @@ class GitHubPlanBuilder:
             for prop in load(f"{prefix}/custom-properties.json", []) or []:
                 name = prop.get("property_name")
                 if name:
-                    self.add_import("github_repository_custom_property", f"{repo}:{name}", f"{self.org}:{repo}:{name}")
+                    self.add_import(
+                        "github_repository_custom_property",
+                        f"{repo}:{name}",
+                        f"{self.org}:{repo}:{name}",
+                    )
             for kind in ("actions", "dependabot"):
                 for secret in load(f"{prefix}/{kind}-secrets.json", []):
                     self.add_repository_secret(kind, repo, secret["name"])
@@ -274,11 +297,19 @@ class GitHubPlanBuilder:
                 self.add_repository_webhook(repo, hook)
             for environment in load(f"{prefix}/environments.json", []):
                 name = environment["name"]
-                self.add_import("github_repository_environment", f"{repo}:{name}", f"{repo}:{escape_colons(name)}")
+                self.add_import(
+                    "github_repository_environment",
+                    f"{repo}:{name}",
+                    f"{repo}:{escape_colons(name)}",
+                )
                 env_prefix = f"{prefix}/environments/{filesystem_name(name)}"
                 for variable in load(f"{env_prefix}/variables.json", []):
                     key = variable["name"]
-                    self.add_import("github_actions_environment_variable", f"{repo}:{name}:{key}", f"{repo}:{escape_colons(name)}:{key}")
+                    self.add_import(
+                        "github_actions_environment_variable",
+                        f"{repo}:{name}:{key}",
+                        f"{repo}:{escape_colons(name)}:{key}",
+                    )
                 for secret in load(f"{env_prefix}/secrets.json", []):
                     self.add_environment_secret(repo, name, secret["name"])
         return self

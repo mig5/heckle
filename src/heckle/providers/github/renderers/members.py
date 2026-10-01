@@ -3,19 +3,20 @@ from __future__ import annotations
 from heckle.hcl.render import emit_config_fields
 from heckle.providers.github.model.types import Model
 
+
 def emit_members_module(model: Model) -> str:
     family = model.families.get("github_membership")
     if not family:
         return "\n".join(
             [
                 'variable "members" {',
-                '  type = any',
-                '}',
-                '',
+                "  type = any",
+                "}",
+                "",
                 'output "usernames" {',
-                '  value = {}',
-                '}',
-                '',
+                "  value = {}",
+                "}",
+                "",
             ]
         )
     lines = [

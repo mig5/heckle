@@ -15,6 +15,7 @@ from heckle.forges.shared.http import RESTClient
 
 class ForgeAdapter(ABC):
     """A forge handler discovers API data; it does not know Terraform resources."""
+
     def __init__(self, connection: Connection, client: RESTClient | None = None) -> None:
         self.connection = connection
         self.client = client or RESTClient(connection)
@@ -40,11 +41,17 @@ class ForgeAdapter(ABC):
             return
         current = self.detail("authenticated user", "/user")
         current_name = self.username(current)
-        selected = current if not source.resolved or current_name.casefold() == source.scope.casefold() else self.lookup_user(source.scope)
+        selected = (
+            current
+            if not source.resolved or current_name.casefold() == source.scope.casefold()
+            else self.lookup_user(source.scope)
+        )
         name = self.username(selected)
         if source.resolved and name.casefold() != source.scope.casefold():
             raise GenerationError("User returned by the API does not match --user")
-        if str(selected.get("type") or "").casefold() == "organization" or selected.get("is_organization"):
+        if str(selected.get("type") or "").casefold() == "organization" or selected.get(
+            "is_organization"
+        ):
             raise GenerationError("--user selected an organization; use --org instead")
         if selected.get("id") is None or current.get("id") is None:
             raise GenerationError("User response is missing a stable account ID")
@@ -61,7 +68,14 @@ class ForgeAdapter(ABC):
             identity = row.get("owner") or {}
             name = self.username(identity)
             if name.casefold() != owner.casefold():
-                self.model.observations.append(Observation(row.get("full_name", name), "skipped", 1, "Repository belongs to another namespace"))
+                self.model.observations.append(
+                    Observation(
+                        row.get("full_name", name),
+                        "skipped",
+                        1,
+                        "Repository belongs to another namespace",
+                    )
+                )
                 continue
             owned[str(row["id"])] = row
         return sorted(owned.values(), key=lambda r: r["name"].casefold())
@@ -70,14 +84,33 @@ class ForgeAdapter(ABC):
     def discover(self, workspace: Path) -> ForgeModel:
         raise NotImplementedError
 
-    def collection(self, scope: str, path: str, *, params: dict[str, Any] | None = None,
-                   key: str | None = None, optional: bool = True, variable: bool = False) -> list[dict[str, Any]] | None:
+    def collection(
+        self,
+        scope: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        key: str | None = None,
+        optional: bool = True,
+        variable: bool = False,
+    ) -> list[dict[str, Any]] | None:
         try:
             value = self.client.get_paginated(path, params=params, key=key)
         except APIError as exc:
             if not optional:
                 raise
-            self.model.observations.append(Observation(scope, "permission_denied" if exc.status in {401, 403} else "unavailable" if exc.status == 404 else "failed", detail=str(exc), http_status=exc.status))
+            self.model.observations.append(
+                Observation(
+                    scope,
+                    (
+                        "permission_denied"
+                        if exc.status in {401, 403}
+                        else "unavailable" if exc.status == 404 else "failed"
+                    ),
+                    detail=str(exc),
+                    http_status=exc.status,
+                )
+            )
             return None
         self.model.observations.append(Observation(scope, "collected", count=len(value)))
         return scrub(value, variable=variable)
@@ -88,10 +121,23 @@ class ForgeAdapter(ABC):
         except APIError as exc:
             if not optional:
                 raise
-            self.model.observations.append(Observation(scope, "permission_denied" if exc.status in {401, 403} else "unavailable" if exc.status == 404 else "failed", detail=str(exc), http_status=exc.status))
+            self.model.observations.append(
+                Observation(
+                    scope,
+                    (
+                        "permission_denied"
+                        if exc.status in {401, 403}
+                        else "unavailable" if exc.status == 404 else "failed"
+                    ),
+                    detail=str(exc),
+                    http_status=exc.status,
+                )
+            )
             return None
         if value is None and optional:
-            self.model.observations.append(Observation(scope, "collected", 0, "No object configured"))
+            self.model.observations.append(
+                Observation(scope, "collected", 0, "No object configured")
+            )
             return None
         if not isinstance(value, dict):
             raise APIError(0, path, "Expected an API object")

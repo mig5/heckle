@@ -1,4 +1,5 @@
 """Coordinate interchangeable discovery, mapping, hydration and static rendering."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
@@ -146,7 +147,7 @@ def write_state_only_adopt_script(
         for item in (known_provider_behaviour_changes or [])
     }
     expected_shell = shlex.quote(json.dumps(expected, sort_keys=True))
-    tf_selector = '${HECKLE_TF_BIN:-' + shlex.quote(tf_command) + '}'
+    tf_selector = "${HECKLE_TF_BIN:-" + shlex.quote(tf_command) + "}"
     header = f"""#!/usr/bin/env bash
 set -euo pipefail
 
@@ -297,8 +298,15 @@ esac
 
 
 class Pipeline:
-    def __init__(self, connection: Connection, options: Options, *, runner: TfRunner | None = None,
-                 forge: object | None = None, progress: Callable[[str], None] = print) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        options: Options,
+        *,
+        runner: TfRunner | None = None,
+        forge: object | None = None,
+        progress: Callable[[str], None] = print,
+    ) -> None:
         self.connection = connection
         self.options = options
         registration = backend(connection.source.forge)
@@ -319,16 +327,22 @@ class Pipeline:
 
     def discover(self, workspace: Path) -> ForgeModel:
         if self.options.from_inventory:
-            self.progress("Loading the saved inventory (provider hydration still contacts the forge).")
+            self.progress(
+                "Loading the saved inventory (provider hydration still contacts the forge)."
+            )
             model = load_inventory(self.options.from_inventory)
             if not self.connection.source.resolved:
                 self.forge.resolve_source()
                 self.connection = self.forge.connection
             if not model.source.matches(self.connection.source):
-                raise GenerationError("Snapshot forge, host, namespace type and scope must exactly match the requested source")
+                raise GenerationError(
+                    "Snapshot forge, host, namespace type and scope must exactly match the requested source"
+                )
             self.connection = replace(self.connection, source=model.source)
             return model
-        self.progress(f"Discovering {self.connection.source.forge} configuration for {self.connection.source.scope}.")
+        self.progress(
+            f"Discovering {self.connection.source.forge} configuration for {self.connection.source.scope}."
+        )
         model = self.forge.discover(workspace)
         if self.connection.source.resolved and not self.connection.source.matches(model.source):
             raise GenerationError("Discovered source does not match the requested namespace")
@@ -350,9 +364,7 @@ class Pipeline:
                 rendered = shlex.join([str(command), *map(str, failed_args)])
                 init_hint = ""
                 if str(failed_args[0]) == "plan":
-                    init_hint = (
-                        f"  {shlex.quote(str(command))} init -backend=false -input=false -no-color\n"
-                    )
+                    init_hint = f"  {shlex.quote(str(command))} init -backend=false -input=false -no-color\n"
                 self.progress(
                     "The failing command was:\n"
                     f"  cd {shlex.quote(str(failed_cwd))}\n"
@@ -391,19 +403,27 @@ class Pipeline:
             output = work / "result"
             if inventory_only:
                 save_inventory(output, model)
-                write_private_json(output / "report.json", generation_report(plan, self.provider.spec))
+                write_private_json(
+                    output / "report.json", generation_report(plan, self.provider.spec)
+                )
                 publish(output, destination, force=self.options.force)
                 return destination
-            failures = [o for o in model.observations if o.status in {"permission_denied", "failed"}]
+            failures = [
+                o for o in model.observations if o.status in {"permission_denied", "failed"}
+            ]
             if failures and not self.options.allow_partial:
-                raise GenerationError(f"Discovery has {len(failures)} permission/API failure(s). Run inventory and inspect coverage, then fix credentials or explicitly use --allow-partial.")
+                raise GenerationError(
+                    f"Discovery has {len(failures)} permission/API failure(s). Run inventory and inspect coverage, then fix credentials or explicitly use --allow-partial."
+                )
             # Discovery can resolve --me or canonicalise the namespace.
             self.runner.connection = self.connection
             self.progress(
                 "Bootstrapping provider installation and schema loading; only provider.tf "
                 "and versions.tf are expected initially. Resource HCL follows hydration."
             )
-            self.progress(f"Hydrating {len(plan.candidates)} import candidates using {self.provider.spec.source} {self.provider.spec.version}.")
+            self.progress(
+                f"Hydrating {len(plan.candidates)} import candidates using {self.provider.spec.source} {self.provider.spec.version}."
+            )
             resources, schema = self.runner.hydrate(self.provider, plan, work / "bootstrap")
             project = self.provider.compile(plan, resources, schema)
             if self.options.state_root:
@@ -412,16 +432,25 @@ class Pipeline:
                 try:
                     state_source = json.loads(source_file.read_text(encoding="utf-8"))
                 except (OSError, ValueError) as exc:
-                    raise GenerationError("--state-root must contain Heckle's .generation/source.json identity record; do not guess an unrelated state") from exc
+                    raise GenerationError(
+                        "--state-root must contain Heckle's .generation/source.json identity record; do not guess an unrelated state"
+                    ) from exc
                 if not Source(**state_source).matches(model.source):
-                    raise GenerationError("State root is associated with a different forge, host or scope")
+                    raise GenerationError(
+                        "State root is associated with a different forge, host or scope"
+                    )
                 existing_state = self.runner.state_addresses(root)
                 reconcile_existing_state(project, existing_state)
             addresses = {r.address for r in project.resources}
             if project.native is not None:
                 addresses.update(record.new_address for record in project.native.imports)
             self.progress("Rendering standalone HCL and local modules.")
-            self.provider.render(project, output, prevent_destroy=self.options.prevent_destroy, split_teams=self.options.split_teams)
+            self.provider.render(
+                project,
+                output,
+                prevent_destroy=self.options.prevent_destroy,
+                split_teams=self.options.split_teams,
+            )
             self.runner.format(output)
             if self.options.validate:
                 self.progress("Validating the generated project without configuring a backend.")
@@ -475,7 +504,9 @@ class Pipeline:
                         disposable=True,
                         known_behaviour=self.provider.known_provider_behaviour,
                     )
-                    recognised_state = list(adoption_safety.get("known_provider_behaviour_changes", []))
+                    recognised_state = list(
+                        adoption_safety.get("known_provider_behaviour_changes", [])
+                    )
                     if recognised_state:
                         self.progress(
                             f"State-only adoption found {len(recognised_state)} change(s) matching known "
@@ -502,8 +533,14 @@ class Pipeline:
                 # managed resources as creates. The user's state-root workflow is
                 # intentionally validated in that managed root instead.
                 adoption_safety = {"status": "skipped_existing_state", "mode": "existing_state"}
-            report = generation_report(plan, self.provider.spec, generated=True, validated=self.options.validate,
-                                       imported_addresses=len(addresses & project.skip_imports), project=project)
+            report = generation_report(
+                plan,
+                self.provider.spec,
+                generated=True,
+                validated=self.options.validate,
+                imported_addresses=len(addresses & project.skip_imports),
+                project=project,
+            )
             report["partial_generation_allowed"] = self.options.allow_partial
             report["adoption_safety"] = adoption_safety
             audit = output / ".generation"
@@ -512,12 +549,21 @@ class Pipeline:
             if adoption_safety.get("mode") == "state_only_import":
                 write_private_json(
                     audit / "imports.json",
-                    [{"address": address, "id": import_id} for address, import_id in self.provider.rendered_imports(project)],
+                    [
+                        {"address": address, "id": import_id}
+                        for address, import_id in self.provider.rendered_imports(project)
+                    ],
                 )
             if self.options.keep_inventory:
                 save_inventory(audit / "inventory", model)
-            (output / ".heckle-generated").write_text("Disposable generation; remove this marker when adopting the project.\n", encoding="utf-8")
-            (output / ".gitignore").write_text(".terraform/\n*.tfstate\n*.tfstate.*\n*.tfplan\n*.tfvars\n*.tfvars.json\ncrash.log\n.generation/\n", encoding="utf-8")
+            (output / ".heckle-generated").write_text(
+                "Disposable generation; remove this marker when adopting the project.\n",
+                encoding="utf-8",
+            )
+            (output / ".gitignore").write_text(
+                ".terraform/\n*.tfstate\n*.tfstate.*\n*.tfplan\n*.tfvars\n*.tfvars.json\ncrash.log\n.generation/\n",
+                encoding="utf-8",
+            )
             readme = GENERATED_README.format(
                 forge=model.source.forge,
                 scope=model.source.scope,
@@ -526,6 +572,7 @@ class Pipeline:
             )
             if model.source.forge == "forgejo":
                 from heckle.providers.forgejo.repository import PERSONAL_CREATION_WARNING
+
                 readme += (
                     "\n## Forgejo repository settings\n\n"
                     "Heckle leaves out repository creation/migration options, mirror settings and "

@@ -1,4 +1,5 @@
 """The optional repair tool changes local HCL only; tests never contact a forge."""
+
 import importlib.util
 from pathlib import Path
 
@@ -22,9 +23,13 @@ spec.loader.exec_module(repair)
 
 @pytest.fixture
 def generated(tmp_path):
-    provider, compiled, resources, _ = compile_repositories(tmp_path, [
-        {"has_pull_requests": False, "has_wiki": False}, {},
-    ])
+    provider, compiled, resources, _ = compile_repositories(
+        tmp_path,
+        [
+            {"has_pull_requests": False, "has_wiki": False},
+            {},
+        ],
+    )
     # Reproduce the old compiler: only this incomplete set was ignored. Everything
     # else (including invalid import defaults) was forwarded to the module.
     legacy_ignored = {"auto_init", "clone_addr", "gitignores", "license", "readme"}
@@ -42,16 +47,30 @@ def generated(tmp_path):
     for item in old.resources:
         family.add(item.body, None)
     lines = [
-        'variable "items" {', '  type = any', '}', '',
-        'variable "keys" {', '  type = set(string)', '}', '',
-        'resource "forgejo_repository" "this" {', '  for_each = var.keys', '',
+        'variable "items" {',
+        "  type = any",
+        "}",
+        "",
+        'variable "keys" {',
+        "  type = set(string)",
+        "}",
+        "",
+        'resource "forgejo_repository" "this" {',
+        "  for_each = var.keys",
+        "",
     ]
     lines.extend(emit_config_fields(family, "var.items[each.key]", 2))
-    lines.extend([
-        '', '  lifecycle {', '    prevent_destroy = true',
-        '    ignore_changes = [auto_init, clone_addr, gitignores, license, readme]',
-        '  }', '}', '',
-    ])
+    lines.extend(
+        [
+            "",
+            "  lifecycle {",
+            "    prevent_destroy = true",
+            "    ignore_changes = [auto_init, clone_addr, gitignores, license, readme]",
+            "  }",
+            "}",
+            "",
+        ]
+    )
     (root / "modules/forgejo_repository/main.tf").write_text("\n".join(lines))
     (root / "README.md").write_text(
         "# Existing project\n\n**Forgejo creation caveat:** the pinned svalabs/forgejo "
@@ -59,8 +78,8 @@ def generated(tmp_path):
         "Keep this unrelated documentation.\n"
     )
     (root / "backend.tf").write_text('terraform { backend "local" {} }\n')
-    (root / "private.tfvars").write_text('# Private fixture; must not be read or rewritten.\n')
-    (root / "terraform.tfstate").write_text('test-state-sentinel')
+    (root / "private.tfvars").write_text("# Private fixture; must not be read or rewritten.\n")
+    (root / "terraform.tfstate").write_text("test-state-sentinel")
     return root
 
 
@@ -85,7 +104,10 @@ def test_repairs_module_and_warning_without_state_changes(generated, capsys):
     assert "try(var.items[each.key].has_pull_requests, null) == false ? null" in text
     assert "prevent_destroy = true" in text
     assert "mirror_interval" in text.split("ignore_changes =", 1)[1]
-    assert main.with_name("main.tf.before-0.1.0-alpha4").read_bytes() == before[main.relative_to(generated)]
+    assert (
+        main.with_name("main.tf.before-0.1.0-alpha4").read_bytes()
+        == before[main.relative_to(generated)]
+    )
     assert PERSONAL_CREATION_WARNING in (generated / "README.md").read_text()
     assert "Keep this unrelated documentation." in (generated / "README.md").read_text()
     for relative, contents in before.items():
@@ -115,7 +137,9 @@ def test_other_provider_version_is_rejected(generated):
 
 def test_custom_creation_expression_is_not_silently_removed(generated):
     path = generated / "modules/forgejo_repository/main.tf"
-    path.write_text(path.read_text().replace("labels = var.items[each.key].labels", "labels = true"))
+    path.write_text(
+        path.read_text().replace("labels = var.items[each.key].labels", "labels = true")
+    )
     assert repair.main([str(generated), "--write"]) == 1
     assert not list(generated.rglob("*.before-0.1.0-alpha4"))
 
@@ -132,17 +156,22 @@ def test_linked_module_is_not_modified(generated, tmp_path):
 
 def test_multiline_ignore_list_is_supported(generated):
     path = generated / "modules/forgejo_repository/main.tf"
-    path.write_text(path.read_text().replace(
-        "ignore_changes = [auto_init, clone_addr, gitignores, license, readme]",
-        "ignore_changes = [\n      auto_init,\n      clone_addr,\n      gitignores,\n      license,\n      readme,\n    ]",
-    ))
+    path.write_text(
+        path.read_text().replace(
+            "ignore_changes = [auto_init, clone_addr, gitignores, license, readme]",
+            "ignore_changes = [\n      auto_init,\n      clone_addr,\n      gitignores,\n      license,\n      readme,\n    ]",
+        )
+    )
     assert repair.main([str(generated), "--write"]) == 0
 
 
 def test_keeps_existing_all_ignore_policy(generated):
     path = generated / "modules/forgejo_repository/main.tf"
-    path.write_text(path.read_text().replace(
-        "ignore_changes = [auto_init, clone_addr, gitignores, license, readme]", "ignore_changes = all",
-    ))
+    path.write_text(
+        path.read_text().replace(
+            "ignore_changes = [auto_init, clone_addr, gitignores, license, readme]",
+            "ignore_changes = all",
+        )
+    )
     assert repair.main([str(generated), "--write"]) == 0
     assert "ignore_changes = all" in path.read_text()

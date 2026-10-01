@@ -26,6 +26,7 @@ def provider_pins_literal_owner(text: str, org: str) -> bool:
         is not None
     )
 
+
 def assert_literal_provider_owner(output: Path, org: str) -> None:
     provider_path = output / "provider.tf"
     text = provider_path.read_text(encoding="utf-8")
@@ -39,6 +40,7 @@ def assert_literal_provider_owner(output: Path, org: str) -> None:
             raise GenerationError(
                 f"generated provider is still overridable via github_org: {provider_path}"
             )
+
 
 def emit_root_modules() -> str:
     return """module "members" {
@@ -103,8 +105,10 @@ def identifier_stem(value: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9_]+", "_", value.lower()).strip("_") or "item"
     return f"item_{stem}" if stem[0].isdigit() else stem
 
+
 def filename_stem(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.lower()).strip("-.") or "item"
+
 
 def unique_render_names(
     keys: Iterable[str], *, local_prefix: str, file_prefix: str
@@ -130,12 +134,14 @@ def unique_render_names(
         result[key] = (local, filename)
     return result
 
+
 def render_local(name: str, value: Any) -> str:
     rendered = render_value(value, 2)
     lines = ["locals {", f"  {name} = {rendered[0]}"]
     lines.extend(rendered[1:])
     lines.extend(["}", ""])
     return "\n".join(lines)
+
 
 def render_merged_local(name: str, fragments: Sequence[str]) -> str:
     if not fragments:
@@ -144,6 +150,7 @@ def render_merged_local(name: str, fragments: Sequence[str]) -> str:
     lines.extend(f"    local.{fragment}," for fragment in fragments)
     lines.extend(["  )", "}", ""])
     return "\n".join(lines)
+
 
 def render_root_model() -> str:
     return """locals {

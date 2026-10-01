@@ -22,17 +22,14 @@ ITEM_BLOCK_RE = re.compile(
 LABEL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
 DOMAIN_HEREDOC_RE = re.compile(r"<<(-?)([A-Za-z_][A-Za-z0-9_]*)")
 
-def scan_delimiters(
-    text: str, state: DomainLexState | None = None
-) -> tuple[int, int, int]:
+
+def scan_delimiters(text: str, state: DomainLexState | None = None) -> tuple[int, int, int]:
     if state is None:
         state = DomainLexState()
     brace = bracket = paren = 0
     for line in text.splitlines(keepends=True):
         if state.heredoc_delimiter is not None:
-            candidate = (
-                line.strip() if state.heredoc_allow_indent else line.rstrip("\r\n")
-            )
+            candidate = line.strip() if state.heredoc_allow_indent else line.rstrip("\r\n")
             if candidate == state.heredoc_delimiter:
                 state.heredoc_delimiter = None
                 state.heredoc_allow_indent = False
@@ -88,6 +85,7 @@ def scan_delimiters(
         state.in_string = False
     return brace, bracket, paren
 
+
 def extract_top_blocks(path: Path) -> tuple[list[TopBlock], str]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
@@ -123,9 +121,7 @@ def extract_top_blocks(path: Path) -> tuple[list[TopBlock], str]:
         if kind == "resource":
             header = RESOURCE_HEADER_RE.match(raw)
             if not header:
-                raise GenerationError(
-                    f"cannot parse resource header at {path}:{start + 1}"
-                )
+                raise GenerationError(f"cannot parse resource header at {path}:{start + 1}")
             resource_type = header.group("type")
             resource_name = header.group("name")
         blocks.append(
@@ -140,12 +136,14 @@ def extract_top_blocks(path: Path) -> tuple[list[TopBlock], str]:
         )
     return blocks, "".join(residual)
 
+
 def strip_outer_block(raw: str) -> str:
     opening = raw.find("{")
     closing = raw.rfind("}")
     if opening < 0 or closing <= opening:
         raise GenerationError("invalid HCL block")
     return raw[opening + 1 : closing]
+
 
 def split_body_items(body_text: str) -> list[str]:
     lines = body_text.splitlines(keepends=True)
@@ -193,14 +191,13 @@ def split_body_items(body_text: str) -> list[str]:
             next_indent = len(lines[i]) - len(lines[i].lstrip())
             if next_indent > indent:
                 continue
-            if ITEM_ATTRIBUTE_RE.match(lines[i]) or ITEM_BLOCK_RE.match(
-                lines[i].rstrip("\r\n")
-            ):
+            if ITEM_ATTRIBUTE_RE.match(lines[i]) or ITEM_BLOCK_RE.match(lines[i].rstrip("\r\n")):
                 break
         if brace or bracket or paren or state.heredoc_delimiter or state.in_block_comment:
             raise GenerationError("Unterminated HCL expression")
         items.append("".join(lines[start:i]).rstrip())
     return items
+
 
 def parse_body(text: str) -> Body:
     result = Body()
@@ -218,12 +215,12 @@ def parse_body(text: str) -> Body:
             raise GenerationError(f"cannot parse HCL item: {first}")
         name = block.group("name")
         labels = tuple(
-            json.loads('"' + value + '"')
-            for value in LABEL_RE.findall(block.group("labels") or "")
+            json.loads('"' + value + '"') for value in LABEL_RE.findall(block.group("labels") or "")
         )
         nested = parse_body(strip_outer_block(raw_item))
         result.blocks.append(NestedBlock(name, labels, nested, raw_item))
     return result
+
 
 def parse_resource(block: TopBlock) -> Resource:
     if block.kind != "resource" or not block.resource_type or not block.resource_name:
@@ -240,5 +237,3 @@ def parse_resource(block: TopBlock) -> Resource:
         lifecycle_raw=lifecycle[0].raw if lifecycle else None,
         source=block.source,
     )
-
-

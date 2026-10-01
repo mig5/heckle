@@ -18,9 +18,7 @@ def _fake_binary(tmp_path: Path, name: str) -> Path:
 
 
 def test_tf_option_selects_terraform():
-    args = build_parser().parse_args([
-        "generate", "forgejo", "--user", "mig5", "--tf", "terraform"
-    ])
+    args = build_parser().parse_args(["generate", "forgejo", "--user", "mig5", "--tf", "terraform"])
     assert args.tf == "terraform"
 
 
@@ -28,9 +26,7 @@ def test_tofu_option_is_not_accepted():
     import pytest
 
     with pytest.raises(SystemExit):
-        build_parser().parse_args([
-            "generate", "forgejo", "--user", "mig5", "--tofu", "/opt/tofu"
-        ])
+        build_parser().parse_args(["generate", "forgejo", "--user", "mig5", "--tofu", "/opt/tofu"])
 
 
 def test_runner_identifies_terraform_and_opentofu(tmp_path, monkeypatch):
@@ -77,9 +73,9 @@ def test_generated_adopt_script_follows_selected_cli(tmp_path):
         tf_label="Terraform",
     )
     terraform_text = terraform_script.read_text(encoding="utf-8")
-    assert 'TF=${HECKLE_TF_BIN:-terraform}' in terraform_text
+    assert "TF=${HECKLE_TF_BIN:-terraform}" in terraform_text
     assert "OPENTOFU_BIN" not in terraform_text
-    assert 'TF_LABEL=Terraform' in terraform_text
+    assert "TF_LABEL=Terraform" in terraform_text
 
     tofu_script = tmp_path / "adopt-tofu.sh"
     write_state_only_adopt_script(
@@ -87,9 +83,9 @@ def test_generated_adopt_script_follows_selected_cli(tmp_path):
         [("forgejo_repository.example", "owner/repo")],
     )
     tofu_text = tofu_script.read_text(encoding="utf-8")
-    assert 'TF=${HECKLE_TF_BIN:-tofu}' in tofu_text
+    assert "TF=${HECKLE_TF_BIN:-tofu}" in tofu_text
     assert "OPENTOFU_BIN" not in tofu_text
-    assert 'TF_LABEL=OpenTofu' in tofu_text
+    assert "TF_LABEL=OpenTofu" in tofu_text
 
 
 def test_runner_preserves_explicit_binary_path_for_generated_project(tmp_path, monkeypatch):
@@ -113,16 +109,28 @@ def test_tf_runner_does_not_force_parallelism_one():
 
 
 @pytest.mark.parametrize("name", ["tofu", "terraform"])
-@pytest.mark.parametrize("version,accepted", [
-    ("1.6.0", False), ("1.7.9", False), ("1.8.0", True),
-    ("1.10.2", True), ("2.0.0", False), ("1.8.0-rc1", False),
-    ("1.9.0-beta1", False), ("1.8.0+build.1", True),
-])
+@pytest.mark.parametrize(
+    "version,accepted",
+    [
+        ("1.6.0", False),
+        ("1.7.9", False),
+        ("1.8.0", True),
+        ("1.10.2", True),
+        ("2.0.0", False),
+        ("1.8.0-rc1", False),
+        ("1.9.0-beta1", False),
+        ("1.8.0+build.1", True),
+    ],
+)
 def test_cli_version_bounds(tmp_path, monkeypatch, name, version, accepted):
     runner = TfRunner(str(_fake_binary(tmp_path, name)))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
-        a[0], 0, json.dumps({"terraform_version": version}), ""
-    ))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(
+            a[0], 0, json.dumps({"terraform_version": version}), ""
+        ),
+    )
     if accepted:
         assert runner.check_version(tmp_path) == version
     else:
@@ -134,10 +142,23 @@ def test_cli_version_bounds(tmp_path, monkeypatch, name, version, accepted):
         assert "--tf or HECKLE_TF_BIN" in str(caught.value)
 
 
-@pytest.mark.parametrize("payload", ["private-secret", "[]", "{}", '{"terraform_version": 18}', '{"terraform_version": "private-secret"}'])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "private-secret",
+        "[]",
+        "{}",
+        '{"terraform_version": 18}',
+        '{"terraform_version": "private-secret"}',
+    ],
+)
 def test_invalid_version_response_is_private(tmp_path, monkeypatch, payload):
     runner = TfRunner(str(_fake_binary(tmp_path, "tofu")))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 0, payload, "private-secret"))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, payload, "private-secret"),
+    )
     with pytest.raises(GenerationError, match="invalid version response") as caught:
         runner.check_version(tmp_path)
     assert "private-secret" not in str(caught.value)

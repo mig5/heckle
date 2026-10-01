@@ -26,7 +26,11 @@ if (checkout / "heckle").is_dir():
 from heckle.errors import GenerationError
 from heckle.hcl.parser import extract_top_blocks, parse_body, parse_resource, strip_outer_block
 from heckle.hcl.render import reindent_block, render_expr
-from heckle.providers.forgejo.repository import CONDITIONAL_FIELDS, IGNORED_FIELDS, PERSONAL_CREATION_WARNING
+from heckle.providers.forgejo.repository import (
+    CONDITIONAL_FIELDS,
+    IGNORED_FIELDS,
+    PERSONAL_CREATION_WARNING,
+)
 
 
 def compact(expression: str) -> str:
@@ -34,8 +38,10 @@ def compact(expression: str) -> str:
 
 
 def guarded(field: str, enabled: str) -> str:
-    return (f"try(var.items[each.key].{enabled}, null) == false ? null : "
-            f"try(var.items[each.key].{field}, null)")
+    return (
+        f"try(var.items[each.key].{enabled}, null) == false ? null : "
+        f"try(var.items[each.key].{field}, null)"
+    )
 
 
 def check_generated(field: str, value: str, enabled: str | None = None) -> None:
@@ -51,15 +57,21 @@ def check_generated(field: str, value: str, enabled: str | None = None) -> None:
 def rewrite_module(path: Path) -> str:
     text = path.read_text(encoding="utf-8")
     blocks, _ = extract_top_blocks(path)
-    matches = [b for b in blocks if b.resource_type == "forgejo_repository" and b.resource_name == "this"]
+    matches = [
+        b for b in blocks if b.resource_type == "forgejo_repository" and b.resource_name == "this"
+    ]
     if len(matches) != 1:
         raise GenerationError("Expected exactly one generated forgejo_repository.this resource")
     block = matches[0]
     resource = parse_resource(block)
     if compact(resource.body.attributes.get("for_each", "")) != "var.keys":
-        raise GenerationError("Not a Heckle 0.1.0-alpha3 var.keys repository module; refusing to rewrite it")
+        raise GenerationError(
+            "Not a Heckle 0.1.0-alpha3 var.keys repository module; refusing to rewrite it"
+        )
     if resource.body.blocks:
-        raise GenerationError("Repository has custom nested blocks; review/edit this module manually")
+        raise GenerationError(
+            "Repository has custom nested blocks; review/edit this module manually"
+        )
     changed = False
     for name in IGNORED_FIELDS & resource.body.attributes.keys():
         check_generated(name, resource.body.attributes[name])
@@ -69,10 +81,14 @@ def rewrite_module(path: Path) -> str:
         for field in fields:
             if field in resource.body.attributes:
                 check_generated(field, resource.body.attributes[field], enabled)
-                changed |= compact(resource.body.attributes[field]) != compact(guarded(field, enabled))
+                changed |= compact(resource.body.attributes[field]) != compact(
+                    guarded(field, enabled)
+                )
                 resource.body.attributes[field] = guarded(field, enabled)
 
-    lifecycle = parse_body(strip_outer_block(resource.lifecycle_raw)) if resource.lifecycle_raw else None
+    lifecycle = (
+        parse_body(strip_outer_block(resource.lifecycle_raw)) if resource.lifecycle_raw else None
+    )
     prior = lifecycle.attributes.get("ignore_changes", "[]") if lifecycle else "[]"
     if prior.strip() == "all":
         ignored = "all"
@@ -99,17 +115,19 @@ def rewrite_module(path: Path) -> str:
             if name != "ignore_changes":
                 rendered = render_expr(value, 4)
                 lines.extend([f"    {name} = {rendered[0]}", *rendered[1:]])
-    lines.extend([
-        "",
-        "    # Creation options and unreadable provider defaults are not imported settings.",
-        f"    ignore_changes = {ignored}",
-    ])
+    lines.extend(
+        [
+            "",
+            "    # Creation options and unreadable provider defaults are not imported settings.",
+            f"    ignore_changes = {ignored}",
+        ]
+    )
     if lifecycle:
         for nested in lifecycle.blocks:
             lines.extend(reindent_block(nested.raw, 4))
     lines.extend(["  }", "}"])
-    start = sum(len(line) for line in text.splitlines(keepends=True)[:block.start_line - 1])
-    return text[:start] + "\n".join(lines) + text[start + len(block.raw):]
+    start = sum(len(line) for line in text.splitlines(keepends=True)[: block.start_line - 1])
+    return text[:start] + "\n".join(lines) + text[start + len(block.raw) :]
 
 
 def save_with_backup(path: Path, content: str) -> None:
@@ -135,14 +153,22 @@ def save_with_backup(path: Path, content: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", type=Path)
-    parser.add_argument("--write", action="store_true", help="Write changes after saving originals; default only prints a diff")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write changes after saving originals; default only prints a diff",
+    )
     args = parser.parse_args(argv)
     root = args.project.expanduser().resolve()
     try:
         versions = (root / "versions.tf").read_text(encoding="utf-8")
-        if not (re.search(r'source\s*=\s*"svalabs/forgejo"', versions)
-                and re.search(r'version\s*=\s*"=\s*1\.6\.0"', versions)):
-            raise GenerationError("This repair targets Heckle output pinned to svalabs/forgejo 1.6.0 only")
+        if not (
+            re.search(r'source\s*=\s*"svalabs/forgejo"', versions)
+            and re.search(r'version\s*=\s*"=\s*1\.6\.0"', versions)
+        ):
+            raise GenerationError(
+                "This repair targets Heckle output pinned to svalabs/forgejo 1.6.0 only"
+            )
         path = root / "modules/forgejo_repository/main.tf"
         if path.is_symlink() or not path.resolve().is_relative_to(root):
             raise GenerationError("Refusing a repository module linked outside this project")
@@ -152,11 +178,16 @@ def main(argv: list[str] | None = None) -> int:
             text = readme.read_text(encoding="utf-8")
             replacement = re.sub(
                 r"(?ms)^\*\*Forgejo creation caveat:\*\*.*?(?=\n\s*\n|\Z)",
-                lambda _: PERSONAL_CREATION_WARNING, text,
+                lambda _: PERSONAL_CREATION_WARNING,
+                text,
             )
             if replacement != text:
                 edits.append((readme, replacement))
-        changed = [(path, content) for path, content in edits if path.read_text(encoding="utf-8") != content]
+        changed = [
+            (path, content)
+            for path, content in edits
+            if path.read_text(encoding="utf-8") != content
+        ]
         # Check all backups before changing either file.
         if args.write:
             for path, _ in changed:
@@ -167,10 +198,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.write:
                 save_with_backup(path, content)
             else:
-                sys.stdout.writelines(difflib.unified_diff(
-                    path.read_text(encoding="utf-8").splitlines(keepends=True),
-                    content.splitlines(keepends=True), fromfile=str(path), tofile=str(path) + " (repaired)",
-                ))
+                sys.stdout.writelines(
+                    difflib.unified_diff(
+                        path.read_text(encoding="utf-8").splitlines(keepends=True),
+                        content.splitlines(keepends=True),
+                        fromfile=str(path),
+                        tofile=str(path) + " (repaired)",
+                    )
+                )
         if not changed:
             print("Already repaired; no files changed.")
         elif not args.write:

@@ -25,7 +25,9 @@ from heckle.providers.base import ProviderSpec
 from heckle.compatibility import provider_spec as audited_provider_spec
 
 
-class DomainModelBuilder(AccessHandlers, RepositoryHandlers, ActionsHandlers, WebhookHandlers, OrganizationHandlers):
+class DomainModelBuilder(
+    AccessHandlers, RepositoryHandlers, ActionsHandlers, WebhookHandlers, OrganizationHandlers
+):
     """Normalize hydrated GitHub provider resources into the canonical model.
 
     The builder owns transformation state and dispatches each provider resource
@@ -74,7 +76,9 @@ class DomainModelBuilder(AccessHandlers, RepositoryHandlers, ActionsHandlers, We
         "github_team_repository",
     }
 
-    def __init__(self, org: str, inventory: Path, provider_spec: ProviderSpec | None = None) -> None:
+    def __init__(
+        self, org: str, inventory: Path, provider_spec: ProviderSpec | None = None
+    ) -> None:
         self.org = org
         self.inventory = inventory
         self.provider_spec = provider_spec or audited_provider_spec("github")
@@ -84,9 +88,7 @@ class DomainModelBuilder(AccessHandlers, RepositoryHandlers, ActionsHandlers, We
         self.unsupported: list[str]
         self.long_rulesets: list[dict[str, str]]
 
-    def build(
-        self, resources: Sequence[Resource], import_records: list[ImportRecord]
-    ) -> Model:
+    def build(self, resources: Sequence[Resource], import_records: list[ImportRecord]) -> Model:
         self.model = Model(org=self.org, imports=import_records)
         self.identities = load_identity_maps(self.inventory)
         self.imports = import_by_address(import_records)

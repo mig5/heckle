@@ -220,7 +220,9 @@ def api_json(
             return json.loads(body) if body else None
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Forgejo API {method} {url} failed with HTTP {exc.code}: {body}") from exc
+        raise RuntimeError(
+            f"Forgejo API {method} {url} failed with HTTP {exc.code}: {body}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Forgejo API {method} {url} failed: {exc.reason}") from exc
 
@@ -288,10 +290,9 @@ def publish_pull_request(body: str, required: dict[str, str]) -> str:
     pulls = api_json("GET", api_url, token, f"repos/{encoded_repo}/pulls?{query}") or []
     existing = None
     for pull in pulls:
-        if (
-            (pull.get("head") or {}).get("ref") == security_branch
-            and (pull.get("base") or {}).get("ref") == base_branch
-        ):
+        if (pull.get("head") or {}).get("ref") == security_branch and (pull.get("base") or {}).get(
+            "ref"
+        ) == base_branch:
             existing = pull
             break
 
@@ -356,7 +357,9 @@ def main() -> int:
     publish_environment = take_publish_environment()
 
     if not Path("pyproject.toml").is_file() or not Path("poetry.lock").is_file():
-        raise RuntimeError("run this tool from a Poetry project root containing pyproject.toml and poetry.lock")
+        raise RuntimeError(
+            "run this tool from a Poetry project root containing pyproject.toml and poetry.lock"
+        )
 
     for command in ("git", "poetry", "syft", "grype"):
         require_command(command)

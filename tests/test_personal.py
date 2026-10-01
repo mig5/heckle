@@ -1,4 +1,5 @@
 """Personal namespace discovery never expands to visible org/group repositories."""
+
 from dataclasses import replace
 import json
 
@@ -23,15 +24,58 @@ class PersonalAPI(API):
     def __init__(self, forge, *, other=False):
         self.forge = forge
         self.parameters = []
-        self.selected = {"id": 5, "login": "alice", "username": "alice", "type": "User", "private_profile": True if not other else False}
-        current = {"id": 6, "login": "bob", "username": "bob", "type": "User"} if other else self.selected
-        self.repo = {"id": 10, "name": "api", "node_id": "R_10", "owner": {"id": 5, "login": "alice"}, "full_name": "alice/api", "private": True, "visibility": "private", "namespace": {"id": 99, "kind": "user", "full_path": "alice"}, "path": "api", "path_with_namespace": "alice/api"}
-        alien = {**self.repo, "id": 11, "name": "shared", "owner": {"login": "a-group"}, "namespace": {"id": 5, "kind": "group"}, "full_name": "a-group/shared", "path_with_namespace": "a-group/shared"}
-        objects = {"/user": current, "/users/alice": self.selected, "/version": {"version": "test"},
-                   "/repos/alice/api": self.repo, "/projects/10": self.repo,
-                   "/namespaces/alice": {"id": 99, "kind": "user", "full_path": "alice", "path": "alice", "name": "Alice"}}
-        collections = {"/user/repos": [self.repo, alien], "/users/alice/repos": [self.repo], "/projects": [self.repo, alien],
-                       "/users/5/projects": [self.repo, alien], "/users": [self.selected]}
+        self.selected = {
+            "id": 5,
+            "login": "alice",
+            "username": "alice",
+            "type": "User",
+            "private_profile": True if not other else False,
+        }
+        current = (
+            {"id": 6, "login": "bob", "username": "bob", "type": "User"} if other else self.selected
+        )
+        self.repo = {
+            "id": 10,
+            "name": "api",
+            "node_id": "R_10",
+            "owner": {"id": 5, "login": "alice"},
+            "full_name": "alice/api",
+            "private": True,
+            "visibility": "private",
+            "namespace": {"id": 99, "kind": "user", "full_path": "alice"},
+            "path": "api",
+            "path_with_namespace": "alice/api",
+        }
+        alien = {
+            **self.repo,
+            "id": 11,
+            "name": "shared",
+            "owner": {"login": "a-group"},
+            "namespace": {"id": 5, "kind": "group"},
+            "full_name": "a-group/shared",
+            "path_with_namespace": "a-group/shared",
+        }
+        objects = {
+            "/user": current,
+            "/users/alice": self.selected,
+            "/version": {"version": "test"},
+            "/repos/alice/api": self.repo,
+            "/projects/10": self.repo,
+            "/namespaces/alice": {
+                "id": 99,
+                "kind": "user",
+                "full_path": "alice",
+                "path": "alice",
+                "name": "Alice",
+            },
+        }
+        collections = {
+            "/user/repos": [self.repo, alien],
+            "/users/alice/repos": [self.repo],
+            "/projects": [self.repo, alien],
+            "/users/5/projects": [self.repo, alien],
+            "/users": [self.selected],
+        }
         super().__init__(objects, collections)
 
     def get(self, path, **kwargs):
@@ -48,7 +92,11 @@ class PersonalAPI(API):
 
     def graphql(self, *args):
         self.calls.append("graphql")
-        return {"repository": {"branchProtectionRules": {"nodes": [], "pageInfo": {"hasNextPage": False}}}}
+        return {
+            "repository": {
+                "branchProtectionRules": {"nodes": [], "pageInfo": {"hasNextPage": False}}
+            }
+        }
 
 
 @pytest.mark.parametrize("forge", FORGES)
@@ -63,7 +111,12 @@ def test_cli_allows_personal_scope(forge, selector, action):
 @pytest.mark.parametrize("forge", FORGES)
 def test_selectors_are_required_and_exclusive(forge):
     namespace = "--group" if forge == "gitlab" else "--org"
-    for args in [[], ["--me", "--user", "alice"], [namespace, "a", "--user", "alice"], [namespace, "a", "--me"]]:
+    for args in [
+        [],
+        ["--me", "--user", "alice"],
+        [namespace, "a", "--user", "alice"],
+        [namespace, "a", "--me"],
+    ]:
         with pytest.raises(SystemExit):
             build_parser().parse_args(["generate", forge, *args])
 
@@ -85,10 +138,16 @@ def test_personal_discovery_owns_only_selected_repositories(forge, scope, tmp_pa
         namespace = next(model.of_kind("user_namespace"))
         assert namespace.remote_id == "99"  # The account's ID is 5, not 99.
         assert "/users/5/projects" not in api.calls
-        assert ("/projects", {"params": {"order_by": "id", "sort": "asc", "owned": "true"}, "key": None}) in api.parameters
+        assert (
+            "/projects",
+            {"params": {"order_by": "id", "sort": "asc", "owned": "true"}, "key": None},
+        ) in api.parameters
     if forge == "github":
         assert not any("properties/values" in p for p in api.calls)
-        assert any(p == "/user/repos" and kw["params"]["affiliation"] == "owner" for p, kw in api.parameters)
+        assert any(
+            p == "/user/repos" and kw["params"]["affiliation"] == "owner"
+            for p, kw in api.parameters
+        )
     save_inventory(tmp_path / "snapshot", model)
     assert load_inventory(tmp_path / "snapshot").source == model.source
 
@@ -144,10 +203,26 @@ def test_personal_pipeline_and_snapshot_replay_do_not_create_user_resources(forg
     api = PersonalAPI(forge)
     handler = backend(forge).forge(conn, api)
     output = tmp_path / "generated"
-    Pipeline(conn, Options(output, keep_inventory=True), forge=handler, runner=FakeRunner(), progress=lambda _: None).run()
+    Pipeline(
+        conn,
+        Options(output, keep_inventory=True),
+        forge=handler,
+        runner=FakeRunner(),
+        progress=lambda _: None,
+    ).run()
     text = "\n".join(p.read_text() for p in output.rglob("*.tf"))
     assert "import {" in text
-    for rtype in ("github_organization_settings", "github_membership", "github_team", "gitlab_group", "gitlab_user", "forgejo_organization", "forgejo_user", "gitea_org", "gitea_user"):
+    for rtype in (
+        "github_organization_settings",
+        "github_membership",
+        "github_team",
+        "gitlab_group",
+        "gitlab_user",
+        "forgejo_organization",
+        "forgejo_user",
+        "gitea_org",
+        "gitea_user",
+    ):
         assert f'resource "{rtype}"' not in text
     assert "@me" not in text
     if forge == "gitlab":
@@ -162,8 +237,13 @@ def test_personal_pipeline_and_snapshot_replay_do_not_create_user_resources(forg
     for scope in ["alice", "@me"]:
         replay_api = PersonalAPI(forge)
         new_connection = personal_connection(forge, scope)
-        Pipeline(new_connection, Options(tmp_path / f"replay-{scope}", from_inventory=output / ".generation/inventory"),
-                 forge=backend(forge).forge(new_connection, replay_api), runner=FakeRunner(), progress=lambda _: None).run()
+        Pipeline(
+            new_connection,
+            Options(tmp_path / f"replay-{scope}", from_inventory=output / ".generation/inventory"),
+            forge=backend(forge).forge(new_connection, replay_api),
+            runner=FakeRunner(),
+            progress=lambda _: None,
+        ).run()
         assert replay_api.calls == (["/user"] if scope == "@me" else [])
 
 
@@ -174,7 +254,13 @@ def test_empty_personal_account_is_valid(forge, tmp_path):
         api.collections[path] = []
     output = tmp_path / "empty"
     conn = personal_connection(forge)
-    Pipeline(conn, Options(output), forge=backend(forge).forge(conn, api), runner=FakeRunner(), progress=lambda _: None).run()
+    Pipeline(
+        conn,
+        Options(output),
+        forge=backend(forge).forge(conn, api),
+        runner=FakeRunner(),
+        progress=lambda _: None,
+    ).run()
     assert not (output / "imports.tf").read_text().strip()
 
 
@@ -186,8 +272,13 @@ def test_me_replay_rejects_a_different_authenticated_user(forge, tmp_path):
     model = backend(forge).forge(conn, original_api).discover(tmp_path / "discovery")
     save_inventory(snapshot, model)
     api = PersonalAPI(forge, other=True)  # /user now resolves to bob, not alice.
-    pipeline = Pipeline(conn, Options(tmp_path / "wrong-account", from_inventory=snapshot),
-                        forge=backend(forge).forge(conn, api), runner=FakeRunner(), progress=lambda _: None)
+    pipeline = Pipeline(
+        conn,
+        Options(tmp_path / "wrong-account", from_inventory=snapshot),
+        forge=backend(forge).forge(conn, api),
+        runner=FakeRunner(),
+        progress=lambda _: None,
+    )
     with pytest.raises(GenerationError, match="Snapshot"):
         pipeline.run()
     assert api.calls == ["/user"]

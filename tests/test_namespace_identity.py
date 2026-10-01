@@ -24,7 +24,11 @@ def test_same_named_personal_and_org_snapshots_are_not_interchangeable(forge, tm
     save_inventory(tmp_path / "snapshot", model_for(forge))
     conn = replace(source, source=replace(source.source, namespace_type="user"))
     with pytest.raises(GenerationError, match="namespace type"):
-        Pipeline(conn, Options(tmp_path / "out", from_inventory=tmp_path / "snapshot"), runner=FakeRunner()).run()
+        Pipeline(
+            conn,
+            Options(tmp_path / "out", from_inventory=tmp_path / "snapshot"),
+            runner=FakeRunner(),
+        ).run()
 
 
 def test_unresolved_me_cannot_be_saved():

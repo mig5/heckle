@@ -3,6 +3,7 @@
 These are offline compiler/renderer tests, not a claim of live provider testing.
 The values model repository_resource.go ImportState; identities are synthetic.
 """
+
 from collections import OrderedDict
 from dataclasses import replace
 from pathlib import Path
@@ -14,31 +15,63 @@ from heckle.hcl.render import hcl_literal
 from heckle.hcl.schema import ProviderSchema
 from heckle.hcl.types import Body, Resource
 from heckle.providers.forgejo.adapter import ForgejoProvider
-from heckle.providers.forgejo.repository import CONDITIONAL_FIELDS, IGNORED_FIELDS, UNREADABLE_FIELDS
+from heckle.providers.forgejo.repository import (
+    CONDITIONAL_FIELDS,
+    IGNORED_FIELDS,
+    UNREADABLE_FIELDS,
+)
 from heckle.pipeline import Pipeline, Options
 from heckle.reporting import format_report, generation_report
 from fixtures import FakeRunner, FakeForge, connection
 
 # The provider sets these without reading their real values during import.
 IMPORT_DEFAULTS = {
-    "allow_manual_merge": False, "archive_on_destroy": False, "auto_init": True,
-    "autodetect_manual_merge": False, "default_delete_branch_after_merge": False,
-    "allow_fast_forward_only_merge": False, "allow_rebase_update": True,
-    "default_allow_maintainer_edit": False, "default_update_style": "merge",
-    "enable_prune": False, "globally_editable_wiki": False, "wiki_branch": "",
-    "gitignores": "", "issue_labels": "", "labels": False, "lfs": False,
-    "lfs_endpoint": "", "license": "", "milestones": False, "readme": "",
-    "service": "", "trust_model": "default", "auth_token": None,
+    "allow_manual_merge": False,
+    "archive_on_destroy": False,
+    "auto_init": True,
+    "autodetect_manual_merge": False,
+    "default_delete_branch_after_merge": False,
+    "allow_fast_forward_only_merge": False,
+    "allow_rebase_update": True,
+    "default_allow_maintainer_edit": False,
+    "default_update_style": "merge",
+    "enable_prune": False,
+    "globally_editable_wiki": False,
+    "wiki_branch": "",
+    "gitignores": "",
+    "issue_labels": "",
+    "labels": False,
+    "lfs": False,
+    "lfs_endpoint": "",
+    "license": "",
+    "milestones": False,
+    "readme": "",
+    "service": "",
+    "trust_model": "default",
+    "auth_token": None,
 }
 
 READABLE = {
-    "has_pull_requests": True, "has_wiki": True, "has_issues": True,
-    "allow_merge_commits": True, "allow_rebase": False, "allow_rebase_explicit": True,
-    "allow_squash_merge": True, "ignore_whitespace_conflicts": False,
-    "default_merge_style": "squash", "private": True, "archived": False,
-    "mirror": False, "mirror_interval": "", "clone_addr": "",
-    "internal_tracker": None, "external_tracker": None, "external_wiki": None,
-    "name": "api", "owner": "alice", "description": "Existing repository",
+    "has_pull_requests": True,
+    "has_wiki": True,
+    "has_issues": True,
+    "allow_merge_commits": True,
+    "allow_rebase": False,
+    "allow_rebase_explicit": True,
+    "allow_squash_merge": True,
+    "ignore_whitespace_conflicts": False,
+    "default_merge_style": "squash",
+    "private": True,
+    "archived": False,
+    "mirror": False,
+    "mirror_interval": "",
+    "clone_addr": "",
+    "internal_tracker": None,
+    "external_tracker": None,
+    "external_wiki": None,
+    "name": "api",
+    "owner": "alice",
+    "description": "Existing repository",
 }
 
 
@@ -47,21 +80,35 @@ def compile_repositories(tmp_path, overrides):
     model = ForgeModel(Source("forgejo", "https://forge.example.test", "alice", "user"))
     for index, values in enumerate(overrides):
         name = f"repo-{index}"
-        model.add(Entity("repository", f"alice/{name}", str(index + 1), "repository",
-                         {"name": name, "owner": {"login": "alice"}, **values}, owner="alice"))
+        model.add(
+            Entity(
+                "repository",
+                f"alice/{name}",
+                str(index + 1),
+                "repository",
+                {"name": name, "owner": {"login": "alice"}, **values},
+                owner="alice",
+            )
+        )
     plan = provider.plan(model, tmp_path)
     resources = []
     for candidate, values in zip(plan.candidates, overrides):
         data = {**READABLE, **IMPORT_DEFAULTS, "name": candidate.key.split("/")[1], **values}
-        resources.append(Resource(
-            "forgejo_repository", candidate.flat_address.split(".")[1],
-            Body(OrderedDict((name, hcl_literal(value)) for name, value in data.items())),
-            None, tmp_path / "generated.tf",
-        ))
+        resources.append(
+            Resource(
+                "forgejo_repository",
+                candidate.flat_address.split(".")[1],
+                Body(OrderedDict((name, hcl_literal(value)) for name, value in data.items())),
+                None,
+                tmp_path / "generated.tf",
+            )
+        )
     attrs = {name: {"optional": True, "computed": True} for name in {*READABLE, *IMPORT_DEFAULTS}}
     attrs["name"] = {"required": True}
     attrs["auth_token"] = {"optional": True, "sensitive": True}
-    schema = ProviderSchema(provider.spec.source, {"forgejo_repository": {"block": {"attributes": attrs}}})
+    schema = ProviderSchema(
+        provider.spec.source, {"forgejo_repository": {"block": {"attributes": attrs}}}
+    )
     return provider, provider.compile(plan, resources, schema), resources, schema
 
 
@@ -70,12 +117,20 @@ def compile_repositories(tmp_path, overrides):
 @pytest.mark.parametrize("issues", [False, True])
 @pytest.mark.parametrize("mirror", [False, True])
 def test_import_defaults_never_become_configuration(tmp_path, prs, wiki, issues, mirror):
-    provider, project, resources, _ = compile_repositories(tmp_path, [{
-        "has_pull_requests": prs, "has_wiki": wiki, "has_issues": issues,
-        "mirror": mirror, "mirror_interval": "8h0m0s" if mirror else "",
-        "internal_tracker": {"enable_time_tracker": False},
-        "external_wiki": {"external_wiki_url": "https://wiki.example.test"},
-    }])
+    provider, project, resources, _ = compile_repositories(
+        tmp_path,
+        [
+            {
+                "has_pull_requests": prs,
+                "has_wiki": wiki,
+                "has_issues": issues,
+                "mirror": mirror,
+                "mirror_interval": "8h0m0s" if mirror else "",
+                "internal_tracker": {"enable_time_tracker": False},
+                "external_wiki": {"external_wiki_url": "https://wiki.example.test"},
+            }
+        ],
+    )
     item = project.resources[0]
     assert not (IGNORED_FIELDS & item.body.attributes.keys())
     assert IGNORED_FIELDS <= item.ignored
@@ -93,7 +148,10 @@ def test_import_defaults_never_become_configuration(tmp_path, prs, wiki, issues,
     # Input snapshots are not mutated by compilation.
     assert resources[0].body.attributes["mirror"] == hcl_literal(mirror)
     assert resources[0].body.attributes["labels"] == "false"
-    assert item.candidate.address == 'module.forgejo_repository.forgejo_repository.this["alice/repo-0"]'
+    assert (
+        item.candidate.address
+        == 'module.forgejo_repository.forgejo_repository.this["alice/repo-0"]'
+    )
 
 
 def test_write_only_defaults_omitted_even_for_enabled_features(tmp_path):
@@ -107,9 +165,13 @@ def test_write_only_defaults_omitted_even_for_enabled_features(tmp_path):
 
 
 def test_mixed_repositories_split_profiles_instead_of_emitting_null(tmp_path):
-    provider, project, _, _ = compile_repositories(tmp_path, [
-        {"has_pull_requests": False, "has_wiki": False}, {},
-    ])
+    provider, project, _, _ = compile_repositories(
+        tmp_path,
+        [
+            {"has_pull_requests": False, "has_wiki": False},
+            {},
+        ],
+    )
     output = tmp_path / "output"
     provider.render(project, output, prevent_destroy=True, split_teams=False)
     module = (output / "modules/forgejo_repository/main.tf").read_text()
@@ -164,7 +226,13 @@ def test_personal_readme_uses_plain_warning(tmp_path):
     _, project, _, _ = compile_repositories(tmp_path, [{}])
     conn = replace(connection("forgejo"), source=project.plan.model.source)
     output = tmp_path / "output"
-    Pipeline(conn, Options(output), runner=FakeRunner(), forge=FakeForge(project.plan.model), progress=lambda _: None).run()
+    Pipeline(
+        conn,
+        Options(output),
+        runner=FakeRunner(),
+        forge=FakeForge(project.plan.model),
+        progress=lambda _: None,
+    ).run()
     readme = (output / "README.md").read_text()
     assert "server-admin" in readme
     assert "stop and check" in readme
@@ -175,7 +243,12 @@ def test_personal_readme_uses_plain_warning(tmp_path):
 @pytest.mark.parametrize(
     ("controller", "attribute", "before_value", "after_value"),
     [
-        ("has_issues", "internal_tracker.enable_time_tracker", {"enable_time_tracker": False}, {"enable_time_tracker": True}),
+        (
+            "has_issues",
+            "internal_tracker.enable_time_tracker",
+            {"enable_time_tracker": False},
+            {"enable_time_tracker": True},
+        ),
         ("has_wiki", "external_wiki", None, {"external_url": "https://example.invalid/wiki"}),
         ("mirror", "enable_prune", False, True),
     ],
