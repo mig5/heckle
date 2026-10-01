@@ -4,6 +4,7 @@
 
 * Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
 * Explain provider bootstrap progress and why resource HCL has not yet been generated at that stage.
+* Fix allowed_actions empty string for orgs in Github provide
 
 ## 0.1.2
 

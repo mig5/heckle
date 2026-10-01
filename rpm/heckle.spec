@@ -1,4 +1,4 @@
-%{!?upstream_version:%global upstream_version 0.1.2}
+%{!?upstream_version:%global upstream_version 0.1.3}
 
 Name:           heckle
 Version:        %{upstream_version}
@@ -40,6 +40,10 @@ requirement for generation and validation, not inventory or coverage reporting.
 %{_bindir}/heckle
 
 %changelog
+* Thu Oct 1 2026 Miguel Jacq <mig@mig5.net> - 0.1.3-1
+- Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
+- Explain provider bootstrap progress and why resource HCL has not yet been generated at that stage.
+- Fix allowed_actions empty string for orgs in Github provide
 * Tue Sep 22 2026 Miguel Jacq <mig@mig5.net> - 0.1.2-1
 - Leave Gitea repository `allow_manual_merge` and `autodetect_manual_merge` settings unmanaged under `go-gitea/gitea` 0.8.1 because imported state does not reliably populate them and provider defaults otherwise produce unsafe adoption updates.
 - Treat Gitea team definitions, unit permissions and team repository grants as inventory-only because provider 0.8.1 loses imported `units_map` values, produces unstable `units` representations and cannot safely update imported granular or owner teams.
