@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+* Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
+* Explain provider bootstrap progress and why resource HCL has not yet been generated at that stage.
+
 ## 0.1.2
 
 * Leave Gitea repository `allow_manual_merge` and `autodetect_manual_merge` settings unmanaged under `go-gitea/gitea` 0.8.1 because imported state does not reliably populate them and provider defaults otherwise produce unsafe adoption updates.

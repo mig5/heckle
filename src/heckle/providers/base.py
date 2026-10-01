@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from heckle.tf_version import TF_VERSION_CONSTRAINT
 from heckle.core.compilation import CompiledProject, ImportPlan
 from heckle.errors import KnownProviderBehaviour, UnsafeChange
 from heckle.core.model import ForgeModel, Source
@@ -23,7 +24,7 @@ class ProviderSpec:
 
     def versions_hcl(self, *, child: bool = False) -> str:
         pin = "" if child else f'      version = "= {self.version}"\n'
-        required = "" if child else '  required_version = ">= 1.8.0, < 2.0.0"\n'
+        required = "" if child else f'  required_version = "{TF_VERSION_CONSTRAINT}"\n'
         return (f'terraform {{\n{required}  required_providers {{\n    {self.local_name} = {{\n'
                 f'      source = {hcl_string(self.source)}\n{pin}    }}\n  }}\n}}\n')
 

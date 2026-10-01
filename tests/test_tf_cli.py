@@ -1,6 +1,11 @@
+import json
 from pathlib import Path
+import subprocess
+
+import pytest
 
 from heckle.cli import build_parser
+from heckle.errors import GenerationError
 from heckle.opentofu import TfRunner
 from heckle.pipeline import write_state_only_adopt_script
 
@@ -105,3 +110,57 @@ def test_tf_runner_does_not_force_parallelism_one():
 
     source = Path(opentofu.__file__).read_text(encoding="utf-8")
     assert '"-parallelism=1"' not in source
+
+
+@pytest.mark.parametrize("name", ["tofu", "terraform"])
+@pytest.mark.parametrize("version,accepted", [
+    ("1.6.0", False), ("1.7.9", False), ("1.8.0", True),
+    ("1.10.2", True), ("2.0.0", False), ("1.8.0-rc1", False),
+    ("1.9.0-beta1", False), ("1.8.0+build.1", True),
+])
+def test_cli_version_bounds(tmp_path, monkeypatch, name, version, accepted):
+    runner = TfRunner(str(_fake_binary(tmp_path, name)))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a[0], 0, json.dumps({"terraform_version": version}), ""
+    ))
+    if accepted:
+        assert runner.check_version(tmp_path) == version
+    else:
+        with pytest.raises(GenerationError) as caught:
+            runner.check_version(tmp_path)
+        assert version in str(caught.value)
+        assert runner.executable in str(caught.value)
+        assert ">= 1.8.0, < 2.0.0" in str(caught.value)
+        assert "--tf or HECKLE_TF_BIN" in str(caught.value)
+
+
+@pytest.mark.parametrize("payload", ["private-secret", "[]", "{}", '{"terraform_version": 18}', '{"terraform_version": "private-secret"}'])
+def test_invalid_version_response_is_private(tmp_path, monkeypatch, payload):
+    runner = TfRunner(str(_fake_binary(tmp_path, "tofu")))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 0, payload, "private-secret"))
+    with pytest.raises(GenerationError, match="invalid version response") as caught:
+        runner.check_version(tmp_path)
+    assert "private-secret" not in str(caught.value)
+
+
+@pytest.mark.parametrize("failure", ["exit", "timeout", "oserror"])
+def test_version_execution_failure(tmp_path, monkeypatch, failure):
+    runner = TfRunner(str(_fake_binary(tmp_path, "tofu")))
+    monkeypatch.setenv("TF_CLI_ARGS", "private-secret")
+    monkeypatch.setenv("TF_LOG", "TRACE")
+
+    def run(args, **kwargs):
+        assert args == [runner.executable, "version", "-json"]
+        assert kwargs["timeout"] == 30
+        assert "TF_CLI_ARGS" not in kwargs["env"]
+        assert "TF_LOG" not in kwargs["env"]
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(args, 30, output="private-secret")
+        if failure == "oserror":
+            raise OSError(13, "Permission denied")
+        return subprocess.CompletedProcess(args, 1, "private-secret", "private-secret")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(GenerationError) as caught:
+        runner.check_version(tmp_path)
+    assert "private-secret" not in str(caught.value)

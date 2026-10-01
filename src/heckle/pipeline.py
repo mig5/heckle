@@ -358,7 +358,7 @@ class Pipeline:
                     f"  cd {shlex.quote(str(failed_cwd))}\n"
                     f"{init_hint}"
                     f"  {rendered}\n"
-                    "Re-run these commands there to see the provider diagnostics privately."
+                    "Re-run these commands there to see the CLI/provider diagnostics privately."
                 )
                 return
         result = work / "result"
@@ -379,6 +379,10 @@ class Pipeline:
         work.chmod(0o700)
         retain_work = False
         try:
+            if not inventory_only:
+                self.runner = self.runner or TfRunner(self.options.tf, self.connection)
+                self.progress("Checking Terraform/OpenTofu version before discovery.")
+                self.runner.check_version(work)
             model = self.discover(work)
             plan = self.provider.plan(model, work)
             for warning in compatibility_warnings(self.provider.spec):
@@ -393,7 +397,12 @@ class Pipeline:
             failures = [o for o in model.observations if o.status in {"permission_denied", "failed"}]
             if failures and not self.options.allow_partial:
                 raise GenerationError(f"Discovery has {len(failures)} permission/API failure(s). Run inventory and inspect coverage, then fix credentials or explicitly use --allow-partial.")
-            self.runner = self.runner or TfRunner(self.options.tf, self.connection)
+            # Discovery can resolve --me or canonicalise the namespace.
+            self.runner.connection = self.connection
+            self.progress(
+                "Bootstrapping provider installation and schema loading; only provider.tf "
+                "and versions.tf are expected initially. Resource HCL follows hydration."
+            )
             self.progress(f"Hydrating {len(plan.candidates)} import candidates using {self.provider.spec.source} {self.provider.spec.version}.")
             resources, schema = self.runner.hydrate(self.provider, plan, work / "bootstrap")
             project = self.provider.compile(plan, resources, schema)

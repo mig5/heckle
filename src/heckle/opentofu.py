@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 from typing import Callable, Sequence
 
+from heckle.tf_version import TF_MIN_VERSION, TF_MAX_VERSION, TF_VERSION_CONSTRAINT
 from heckle.config import Connection
 from heckle.core.compilation import ImportPlan
 from heckle.errors import KnownProviderBehaviour, GenerationError, UnsafeAdoptionError, UnsafeChange
@@ -64,6 +66,45 @@ class TfRunner:
         self.connection = connection
         self.last_arguments: tuple[str, ...] | None = None
         self.last_cwd: Path | None = None
+
+    def check_version(self, cwd: Path) -> str:
+        """Fail before discovery, without exposing subprocess output or secrets."""
+        self.last_arguments = ("version", "-json")
+        self.last_cwd = Path(cwd).resolve()
+        hint = "Select a supported executable with --tf or HECKLE_TF_BIN."
+        try:
+            result = subprocess.run(
+                [self.executable, "version", "-json"], cwd=cwd,
+                env=self.environment(), text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, check=False, timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise GenerationError(f"{self.tool_name} version check timed out after 30 seconds. {hint}") from exc
+        except OSError as exc:
+            raise GenerationError(f"Unable to run {self.tool_name}: {exc.strerror}. {hint}") from exc
+        if result.returncode:
+            raise GenerationError(
+                f"{self.tool_name} version -json failed (exit {result.returncode}). {hint}"
+            )
+        try:
+            payload = json.loads(result.stdout)
+            version = payload.get("terraform_version") if isinstance(payload, dict) else None
+            match = re.fullmatch(
+                r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?",
+                version,
+            ) if isinstance(version, str) else None
+        except ValueError:
+            match = None
+        if match is None:
+            raise GenerationError(f"{self.tool_name} version -json returned an invalid version response. {hint}")
+        # Match the generated required_version constraint, including its exclusion
+        # of prereleases. Both CLIs use terraform_version in their JSON response.
+        if not (TF_MIN_VERSION <= tuple(map(int, match.group(1, 2, 3))) < TF_MAX_VERSION) or match.group(4):
+            raise GenerationError(
+                f"Unsupported {self.tool_name} version {version} at {self.executable}; "
+                f"Heckle requires {TF_VERSION_CONSTRAINT} (stable releases). {hint}"
+            )
+        return version
 
     def environment(self, *, managed_state: bool = False) -> dict[str, str]:
         env = os.environ.copy()

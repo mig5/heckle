@@ -28,7 +28,7 @@ def test_all_backends_generate_without_runtime_worker(forge, tmp_path):
     assert not any(token in text for token in ['data "external"', 'provisioner ', 'file("inventory', 'python'])
     assert not (output / ".terraform").exists()
     assert not list(output.rglob("*.tfstate"))
-    assert runner.calls == ["hydrate", "format", "validate", "adoption check"]
+    assert runner.calls == ["version", "hydrate", "format", "validate", "adoption check"]
     report = json.loads((output / ".generation/report.json").read_text())
     assert report["validation"] == "passed"  # fake runner's claimed result only
     assert report["state_changes_performed"] is False
@@ -53,7 +53,7 @@ def test_failures_not_silently_empty(tmp_path):
     runner = FakeRunner()
     with pytest.raises(GenerationError, match="permission/API"):
         Pipeline(connection("gitlab"), Options(tmp_path / "fail"), runner=runner, forge=FakeForge(model)).run()
-    assert not runner.calls
+    assert runner.calls == ["version"]
     assert not (tmp_path / "fail").exists()
     Pipeline(connection("gitlab"), Options(tmp_path / "allowed", allow_partial=True), runner=runner, forge=FakeForge(model)).run()
     assert (tmp_path / "allowed/.generation/report.json").is_file()
@@ -144,7 +144,7 @@ def test_unsafe_import_blocks_fall_back_to_state_only_adoption(tmp_path):
     ]
     assert (output / ".generation/imports.json").is_file()
     assert runner.calls == [
-        "hydrate", "format", "validate", "adoption check", "state-only adoption check"
+        "version", "hydrate", "format", "validate", "adoption check", "state-only adoption check"
     ]
 
 
@@ -241,3 +241,43 @@ def test_cli_accepts_keep_workdir():
         "generate", "gitlab", "--user", "alice", "--keep-workdir"
     ])
     assert args.keep_workdir is True
+
+
+@pytest.mark.parametrize("replay", [False, True])
+def test_version_failure_precedes_discovery_and_inventory_replay(tmp_path, replay):
+    runner = FakeRunner()
+    messages = []
+
+    def reject(cwd):
+        raise GenerationError("Unsupported OpenTofu version 1.6.0")
+
+    runner.check_version = reject
+    pipeline = Pipeline(
+        connection("github"),
+        Options(tmp_path / "output", from_inventory=tmp_path / "missing" if replay else None),
+        runner=runner, forge=FakeForge(model_for("github")), progress=messages.append,
+    )
+
+    def unexpected_discovery(work):
+        pytest.fail("Discovery must not run with an unsupported CLI")
+
+    pipeline.discover = unexpected_discovery
+    with pytest.raises(GenerationError, match="Unsupported OpenTofu version 1.6.0"):
+        pipeline.run()
+    assert not runner.calls
+    assert not (tmp_path / "output").exists()
+    assert not list(tmp_path.glob(".*-build-*"))
+
+
+def test_bootstrap_message_precedes_hydration(tmp_path):
+    messages = []
+    runner = FakeRunner()
+
+    def fail(provider, plan, workspace):
+        assert "only provider.tf and versions.tf" in messages[-2]
+        raise GenerationError("init failed")
+
+    runner.hydrate = fail
+    with pytest.raises(GenerationError, match="init failed"):
+        Pipeline(connection("github"), Options(tmp_path / "output"), runner=runner,
+                 forge=FakeForge(model_for("github")), progress=messages.append).run()

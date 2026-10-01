@@ -87,6 +87,10 @@ class FakeRunner:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
+    def check_version(self, cwd):
+        self.calls.append("version")
+        return "1.8.0"
+
     def hydrate(self, provider, plan, workspace):
         self.calls.append("hydrate")
         workspace.mkdir(parents=True)
