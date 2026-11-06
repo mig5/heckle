@@ -39,6 +39,9 @@
           # terraform at run time, which it takes from --tf or PATH.
           dependencies = [ ];
 
+          # Tests run under `nix flake check` (checks.default below), not on every
+          # build, so consumers such as dev shells don't run the suite on install.
+          doCheck = false;
           nativeCheckInputs = [ python3Packages.pytestCheckHook ];
           pythonImportsCheck = [ "heckle" ];
 
@@ -56,7 +59,7 @@
           inherit heckle;
           default = heckle;
         };
-        # `nix flake check` builds the package, which runs the test suite.
-        checks.default = heckle;
+        # `nix flake check` builds the package with its test suite.
+        checks.default = heckle.overridePythonAttrs (_: { doCheck = true; });
       });
 }

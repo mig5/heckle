@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
@@ -483,7 +484,8 @@ def _fake_tofu_for_adopt_script(tmp_path, payload):
     plan_json.write_text(json.dumps(payload))
     tofu = tmp_path / "fake-tofu"
     tofu.write_text(
-        "#!/usr/bin/env python3\n"
+        # The interpreter path, not /usr/bin/env: build sandboxes such as Nix's lack it.
+        f"#!{sys.executable}\n"
         "import os, pathlib, sys\n"
         "cmd = sys.argv[1] if len(sys.argv) > 1 else ''\n"
         "if cmd == 'state':\n"
@@ -528,7 +530,7 @@ def test_generated_adopt_script_accepts_only_rehearsed_known_provider_behaviour(
     )
     env = os.environ.copy()
     env.update({"HECKLE_TF_BIN": str(tofu), "FAKE_PLAN_JSON": str(plan_json)})
-    result = subprocess.run([str(script)], cwd=tmp_path, env=env, text=True, capture_output=True)
+    result = subprocess.run(["bash", str(script)], cwd=tmp_path, env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Known provider behaviour" in result.stdout
     assert "Heckle cannot determine whether applying them is appropriate" in result.stdout
@@ -562,7 +564,7 @@ def test_generated_adopt_script_rejects_extra_live_change(tmp_path):
     )
     env = os.environ.copy()
     env.update({"HECKLE_TF_BIN": str(tofu), "FAKE_PLAN_JSON": str(plan_json)})
-    result = subprocess.run([str(script)], cwd=tmp_path, env=env, text=True, capture_output=True)
+    result = subprocess.run(["bash", str(script)], cwd=tmp_path, env=env, text=True, capture_output=True)
     assert result.returncode == 2
     assert "unexpected attributes private" in result.stderr
     assert "DO NOT APPLY IT" in result.stderr
