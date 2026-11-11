@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+* Give archived GitHub repositories their own block that ignores unreadable settings
+ 
 ## 0.1.4
 
 * Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.

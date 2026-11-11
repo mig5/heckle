@@ -7,6 +7,10 @@ from dataclasses import asdict
 import json
 import re
 
+import pytest
+
+from heckle.errors import GenerationError
+
 from heckle.core.security import write_private_json
 from heckle.forges.github.discovery import GitHubInventoryExporter
 from heckle.forges.github.normalize import normalize
@@ -16,7 +20,8 @@ from heckle.providers.github.model.inventory import load_identity_maps
 from heckle.providers.github.plan import GitHubPlanBuilder
 from fixtures import BODIES, FakeForge, FakeRunner, connection
 
-REPOSITORY_ADDRESS = 'module.repositories.github_repository.this["dz-pytm"]'
+ACTIVE_ADDRESS = 'module.repositories.github_repository.this["dz-pytm"]'
+ARCHIVED_ADDRESS = 'module.repositories.github_repository.archived["dz-pytm"]'
 
 
 def repository(name: str, repo_id: int, *, archived: bool) -> dict:
@@ -140,14 +145,31 @@ def test_archived_repository_renders_as_archived(tmp_path, monkeypatch):
     output = generate(tmp_path / "out", model(archived=True), monkeypatch)
     planned = imports(output)
 
-    assert REPOSITORY_ADDRESS in planned
-    assert not any("dz-pytm" in address and address != REPOSITORY_ADDRESS for address in planned)
+    assert ARCHIVED_ADDRESS in planned
+    assert not any("dz-pytm" in address and address != ARCHIVED_ADDRESS for address in planned)
+    assert 'module.repositories.github_repository.this["api"]' in planned
+    assert not (output / "moved.tf").exists()  # a fresh adoption moves nothing
 
     [data_file] = [p for p in output.glob("repository-*.tf") if "dz-pytm" in p.read_text()]
     text = data_file.read_text()
     assert re.search(r'(?m)^\s*"?archived"?\s*=\s*true\s*$', text)
-    for unmanaged in ("default_branch", "webhooks", "collaborators"):
+    # Contents, and settings the provider cannot read for an archived repository.
+    for unmanaged in ("default_branch", "webhooks", "collaborators", "allow_merge_commit"):
         assert unmanaged not in text
+    [api_file] = [p for p in output.glob("repository-*.tf") if '"api"' in p.read_text()]
+    assert "allow_merge_commit" in api_file.read_text()  # still managed when active
+
+    module = (output / "modules/repositories/main.tf").read_text()
+    archived_block = module[module.index('resource "github_repository" "archived"') :]
+    archived_block = archived_block[: archived_block.index("\n}\n")]
+    assert "if try(repository.settings.archived, false)" in module
+    assert "if !try(repository.settings.archived, false)" in module
+    assert "prevent_destroy = true" in archived_block
+    assert re.search(r"ignore_changes = \[[^\]]*allow_merge_commit,", archived_block)
+    this_block = module[module.index('resource "github_repository" "this"') :]
+    this_block = this_block[: this_block.index("\n}\n")]
+    assert "ignore_changes" not in this_block
+    assert "github_repository.archived : key => repository.name" in module
 
     # An allowlist naming the archived repository resolves to its key, not a raw ID
     # that var.repository_ids could not index.
@@ -160,7 +182,7 @@ def test_archiving_a_managed_repository_is_not_a_deletion(tmp_path, monkeypatch)
     """The reported failure: archive a repository already in state, then regenerate."""
     first = generate(tmp_path / "before", model(archived=False), monkeypatch)
     in_state = imports(first)
-    assert REPOSITORY_ADDRESS in in_state
+    assert ACTIVE_ADDRESS in in_state
 
     runner = NamedRunner()
     runner.state_addresses = lambda root: set(in_state)
@@ -168,10 +190,12 @@ def test_archiving_a_managed_repository_is_not_a_deletion(tmp_path, monkeypatch)
         tmp_path / "after", model(archived=True), monkeypatch, state_root=first, runner=runner
     )
 
-    # Still configured, now archived, and not imported a second time.
+    # Still configured, now archived, moved in state rather than imported again.
     [data_file] = [p for p in second.glob("repository-*.tf") if "dz-pytm" in p.read_text()]
     assert re.search(r'(?m)^\s*"?archived"?\s*=\s*true\s*$', data_file.read_text())
     assert imports(second) == set()
+    moved = (second / "moved.tf").read_text()
+    assert moved == f"moved {{\n  from = {ACTIVE_ADDRESS}\n  to   = {ARCHIVED_ADDRESS}\n}}\n"
 
     # Only the read-only contents of the archived repository leave the configuration;
     # those are the objects a caller forgets from state.
@@ -224,3 +248,36 @@ def test_discovery_reads_only_settings_of_archived_repositories(tmp_path):
     assert any(call.startswith("/repos/example/api/") for call in client.calls)
     coverage = json.loads((tmp_path / "inventory/coverage.json").read_text())
     assert coverage["archived_repositories"] == ["dz-pytm"]
+
+
+def test_unarchiving_moves_the_repository_back(tmp_path, monkeypatch):
+    first = generate(tmp_path / "archived", model(archived=True), monkeypatch)
+    in_state = imports(first)
+    assert ARCHIVED_ADDRESS in in_state
+
+    runner = NamedRunner()
+    runner.state_addresses = lambda root: set(in_state)
+    second = generate(
+        tmp_path / "active", model(archived=False), monkeypatch, state_root=first, runner=runner
+    )
+    moved = (second / "moved.tf").read_text()
+    assert moved == f"moved {{\n  from = {ARCHIVED_ADDRESS}\n  to   = {ACTIVE_ADDRESS}\n}}\n"
+    assert ACTIVE_ADDRESS not in imports(second)
+    # Its contents become manageable again and are imported.
+    assert 'module.repositories.github_branch_default.this["dz-pytm"]' in imports(second)
+
+
+def test_state_with_both_addresses_is_refused(tmp_path, monkeypatch):
+    first = generate(tmp_path / "first", model(archived=True), monkeypatch)
+    runner = NamedRunner()
+    runner.state_addresses = lambda root: imports(first) | {ACTIVE_ADDRESS}
+    with pytest.raises(GenerationError, match="refusing to guess"):
+        generate(tmp_path / "second", model(archived=True), monkeypatch, state_root=first, runner=runner)
+
+
+def test_organization_without_archived_repositories_keeps_one_block(tmp_path, monkeypatch):
+    output = generate(tmp_path / "out", model(archived=False), monkeypatch)
+    module = (output / "modules/repositories/main.tf").read_text()
+    assert 'resource "github_repository" "archived"' not in module
+    assert "instances_github_repository_this = var.repositories\n" in module
+    assert "ignore_changes = [\n      allow_auto_merge" not in module

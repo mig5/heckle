@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from heckle.hcl.render import emit_config_fields, reindent_block, safe_identifier
+from heckle.providers.github.model.inventory import ARCHIVED_REPOSITORY_UNREADABLE_ATTRIBUTES
 from heckle.providers.github.model.types import Model
 
 REPO_FAMILY_META: dict[str, dict[str, Any]] = {
@@ -222,26 +223,47 @@ def emit_repository_module(model: Model, prevent_destroy: bool) -> str:
         lines.extend(local_defs)
         lines.extend(["}", ""])
 
+    # Archived repositories get their own block, because the settings the provider
+    # cannot read for them must be ignored there and only there.
+    blocks = ["this", "archived"] if model.archived_repositories else ["this"]
     if repo_family:
-        lines.extend(
-            [
-                'resource "github_repository" "this" {',
-                "  for_each = var.repositories",
-                "",
-                "  name = each.key",
-            ]
-        )
-        lines.extend(emit_config_fields(repo_family, "each.value.settings", 2))
-        if prevent_destroy:
+        for block in blocks:
+            if block == "archived":
+                for_each = (
+                    "{ for key, repository in var.repositories : key => repository "
+                    "if try(repository.settings.archived, false) }"
+                )
+            elif model.archived_repositories:
+                for_each = (
+                    "{ for key, repository in var.repositories : key => repository "
+                    "if !try(repository.settings.archived, false) }"
+                )
+            else:
+                for_each = "var.repositories"
             lines.extend(
                 [
+                    f'resource "github_repository" "{block}" {{',
+                    f"  for_each = {for_each}",
                     "",
-                    "  lifecycle {",
-                    "    prevent_destroy = true",
-                    "  }",
+                    "  name = each.key",
                 ]
             )
-        lines.extend(["}", ""])
+            lines.extend(emit_config_fields(repo_family, "each.value.settings", 2))
+            lifecycle: list[str] = []
+            if prevent_destroy:
+                lifecycle.append("    prevent_destroy = true")
+            if block == "archived":
+                lifecycle.extend(
+                    [
+                        "    # Not readable for an archived repository, and not updatable.",
+                        "    ignore_changes = [",
+                        *(f"      {attr}," for attr in ARCHIVED_REPOSITORY_UNREADABLE_ATTRIBUTES),
+                        "    ]",
+                    ]
+                )
+            if lifecycle:
+                lines.extend(["", "  lifecycle {", *lifecycle, "  }"])
+            lines.extend(["}", ""])
 
     for rtype, meta in REPO_FAMILY_META.items():
         family = model.families.get(rtype)
@@ -310,11 +332,17 @@ def emit_repository_module(model: Model, prevent_destroy: bool) -> str:
             lines.extend(["}", ""])
 
     if repo_family:
-        names_value = "{ for key, repository in github_repository.this : key => repository.name }"
-        ids_value = "{ for key, repository in github_repository.this : key => repository.repo_id }"
-        node_ids_value = (
-            "{ for key, repository in github_repository.this : key => repository.node_id }"
-        )
+
+        def merged(attribute: str) -> str:
+            parts = [
+                f"{{ for key, repository in github_repository.{block} : key => repository.{attribute} }}"
+                for block in blocks
+            ]
+            return parts[0] if len(parts) == 1 else "merge(" + ", ".join(parts) + ")"
+
+        names_value = merged("name")
+        ids_value = merged("repo_id")
+        node_ids_value = merged("node_id")
     else:
         names_value = ids_value = node_ids_value = "{}"
 

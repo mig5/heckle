@@ -1,3 +1,9 @@
+heckle (0.1.5-1) unstable; urgency=medium
+
+ * Give archived GitHub repositories their own block that ignores unreadable settings
+
+ -- Miguel Jacq <mig@mig5.net>  Thu, 12 Nov 2026 09:15:00 +1100
+
 heckle (0.1.4-1) unstable; urgency=medium
 
  * Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.

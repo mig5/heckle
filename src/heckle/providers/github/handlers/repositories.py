@@ -6,6 +6,7 @@ from heckle.errors import GenerationError
 from heckle.hcl.render import body_to_value, literal_string
 from heckle.hcl.types import Body, Resource
 from heckle.providers.github.model.inventory import (
+    ARCHIVED_REPOSITORY_UNREADABLE_ATTRIBUTES,
     prepare_long_ruleset_name,
     read_json,
     repository_config_from_inventory,
@@ -28,17 +29,25 @@ class RepositoryHandlers:
         repo: str,
         repository: MutableMapping[str, Any],
     ) -> None:
+        # Decided from the repository listing, exactly as GitHubPlanBuilder.build does.
+        archived = bool((self.identities["repo_by_name"].get(repo) or {}).get("archived"))
         generated_config = strip_attrs(resource.body, {"name"})
         config = repository_config_from_inventory(repo, self.inventory, generated_config)
+        if archived:
+            for attr in ARCHIVED_REPOSITORY_UNREADABLE_ATTRIBUTES:
+                config.attributes.pop(attr, None)
         repository["settings"] = body_to_value(config)
         add_body_family(self.model, resource, config)
-        self.imports[resource.address].new_address = (
-            f"module.repositories.github_repository.this[{hcl_literal(repo)}]"
+        block, other = ("archived", "this") if archived else ("this", "archived")
+        address = f"module.repositories.github_repository.{block}[{hcl_literal(repo)}]"
+        self.imports[resource.address].new_address = address
+        self.model.previous_addresses[address] = (
+            f"module.repositories.github_repository.{other}[{hcl_literal(repo)}]"
         )
 
-        # Decided from the repository listing, exactly as GitHubPlanBuilder.build does.
-        if (self.identities["repo_by_name"].get(repo) or {}).get("archived"):
+        if archived:
             # Only the repository itself; its default branch and Pages are read-only.
+            self.model.archived_repositories.add(repo)
             return
         details = read_json(self.inventory / "repositories" / repo / "repository.json", {}) or {}
         default_branch = details.get("default_branch")

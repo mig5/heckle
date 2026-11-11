@@ -29,6 +29,11 @@ class Model:
         default_factory=OrderedDict
     )
     report: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # Repositories rendered as github_repository.archived rather than .this.
+    archived_repositories: set[str] = dataclasses.field(default_factory=set)
+    # Current address -> the address the same repository has in the other block.
+    # Regenerating over an existing state turns these into moved blocks.
+    previous_addresses: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def family(self, resource_type: str) -> Family:
         return self.families.setdefault(resource_type, Family(resource_type))

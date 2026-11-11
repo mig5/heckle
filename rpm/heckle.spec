@@ -1,4 +1,4 @@
-%{!?upstream_version:%global upstream_version 0.1.4}
+%{!?upstream_version:%global upstream_version 0.1.5}
 
 Name:           heckle
 Version:        %{upstream_version}
@@ -40,6 +40,8 @@ requirement for generation and validation, not inventory or coverage reporting.
 %{_bindir}/heckle
 
 %changelog
+* Thu Nov 12 2026 Miguel Jacq <mig@mig5.net> - 0.1.5-1
+- Give archived GitHub repositories their own block that ignores unreadable settings
 * Thu Nov 12 2026 Miguel Jacq <mig@mig5.net> - 0.1.4-1
 - Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.
 * Thu Oct 1 2026 Miguel Jacq <mig@mig5.net> - 0.1.3-1

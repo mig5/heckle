@@ -145,7 +145,7 @@ you can inspect permissions. `generate` refuses recorded permission/API failures
 unless `--allow-partial` is explicitly supplied. A 404 can mean an absent feature
 or a hidden endpoint; it is recorded as unavailable, not proof of completeness.
 Objects outside the adapter's coverage are reported and never converted into
-create operations. Archived GitHub repositories are managed with `archived = true`, so archiving one is never planned as a deletion; their contents (collaborators, team grants, protections, webhooks, secrets and so on) are read-only on GitHub and are not managed. On GitLab, Gitea and Forgejo, archived repositories are inventoried but not managed.
+create operations. Archived GitHub repositories are managed with `archived = true` (as `github_repository.archived`, which ignores the merge settings GitHub does not return for an archived repository), so archiving one is never planned as a deletion; their contents (collaborators, team grants, protections, webhooks, secrets and so on) are read-only on GitHub and are not managed. On GitLab, Gitea and Forgejo, archived repositories are inventoried but not managed.
 
 Common generation options:
 

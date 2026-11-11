@@ -38,6 +38,29 @@ REPOSITORY_UNMANAGED_ATTRIBUTES = {
     "repo_id",
 }
 
+# integrations/github's repository read skips these when the repository is archived
+# ("GitHub API doesn't respond following parameters when repository is archived"),
+# and its update is skipped entirely for an archived repository. An imported archived
+# repository therefore has no value for them in state, and an already-managed one
+# keeps whatever it had when it was archived. They are left out of an archived
+# repository's configuration and ignored on github_repository.archived.
+ARCHIVED_REPOSITORY_UNREADABLE_ATTRIBUTES = (
+    "allow_auto_merge",
+    "allow_forking",
+    "allow_merge_commit",
+    "allow_rebase_merge",
+    "allow_squash_merge",
+    "allow_update_branch",
+    "delete_branch_on_merge",
+    "has_downloads",
+    "ignore_vulnerability_alerts_during_read",
+    "merge_commit_message",
+    "merge_commit_title",
+    "squash_merge_commit_message",
+    "squash_merge_commit_title",
+    "web_commit_signoff_required",
+)
+
 REPOSITORY_API_ATTRIBUTES = OrderedDict(
     [
         ("description", "description"),

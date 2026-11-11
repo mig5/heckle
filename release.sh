@@ -15,7 +15,7 @@ mkdir -p dist
 poetry build
 
 # AppImage from the same Poetry environment.
-poetry run pyproject-appimage --output dist/Heckle.AppImage
+#poetry run pyproject-appimage --output dist/Heckle.AppImage
 
 # Detached signatures for Python/AppImage artifacts.
 for file in dist/*; do

@@ -119,6 +119,19 @@ def reconcile_existing_state(project, existing_state: set[str]) -> None:
         if legacy in existing_state:
             project.skip_imports.add(current)
             project.moved.append((legacy, current))
+    # A provider's own model can also move an object between addresses, e.g. a GitHub
+    # repository between the active and archived blocks when it is (un)archived.
+    previous = getattr(getattr(project, "native", None), "previous_addresses", None) or {}
+    for current, legacy in sorted(previous.items()):
+        if legacy not in existing_state:
+            continue
+        if current in existing_state:
+            raise GenerationError(
+                f"State contains both {legacy} and {current}; "
+                "refusing to guess which state object should be kept"
+            )
+        project.skip_imports.add(current)
+        project.moved.append((legacy, current))
 
 
 def write_state_only_adopt_script(

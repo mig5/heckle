@@ -169,6 +169,14 @@ class GitHubProvider(ProviderAdapter):
             spec=self.spec,
             source=project.plan.model.source,
         )
+        if project.moved:
+            (destination / "moved.tf").write_text(
+                "\n".join(
+                    f"moved {{\n  from = {old}\n  to   = {new}\n}}\n"
+                    for old, new in sorted(project.moved)
+                ),
+                encoding="utf-8",
+            )
         from heckle.providers.github.renderers.common import assert_literal_provider_owner
 
         assert_literal_provider_owner(destination, project.plan.model.source.scope)
