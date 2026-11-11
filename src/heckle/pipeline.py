@@ -76,7 +76,8 @@ Terraform/OpenTofu declarations; no separate import worker is needed.
 
 Inspect `.generation/report.json`: inventory-only, unsupported, non-importable and
 permission-denied objects are not silently converted into create operations.
-Archived repositories are inventoried but excluded from configuration generation.
+Archived GitHub repositories are managed with `archived = true`, but not their contents;
+other forges' archived repositories are inventoried but excluded from generation.
 The report covers queried endpoints, not every possible setting on the forge.
 
 `prevent_destroy` is enabled by default on native resource modules and GitHub

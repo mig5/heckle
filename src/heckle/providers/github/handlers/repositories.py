@@ -36,6 +36,10 @@ class RepositoryHandlers:
             f"module.repositories.github_repository.this[{hcl_literal(repo)}]"
         )
 
+        # Decided from the repository listing, exactly as GitHubPlanBuilder.build does.
+        if (self.identities["repo_by_name"].get(repo) or {}).get("archived"):
+            # Only the repository itself; its default branch and Pages are read-only.
+            return
         details = read_json(self.inventory / "repositories" / repo / "repository.json", {}) or {}
         default_branch = details.get("default_branch")
         if default_branch:

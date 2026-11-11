@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+* Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.
+
 ## 0.1.3
 
 * Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.

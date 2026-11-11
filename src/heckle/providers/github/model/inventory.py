@@ -153,8 +153,9 @@ def repository_pages_config_from_inventory(details: Mapping[str, Any]) -> Body |
 
 def load_identity_maps(inventory: Path) -> dict[str, Any]:
     repos = read_json(inventory / "repositories.json", []) or []
-    active = [r for r in repos if not r.get("archived", False)]
-    repo_by_name = {str(r["name"]): r for r in active}
+    # Archived repositories are managed too (see GitHubPlanBuilder.build), and their
+    # IDs must resolve, e.g. in an organization secret's selected repositories.
+    repo_by_name = {str(r["name"]): r for r in repos}
     repo_id_to_name: dict[str, str] = {}
     repo_node_to_name: dict[str, str] = {}
     for name, summary in repo_by_name.items():

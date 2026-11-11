@@ -257,12 +257,19 @@ class GitHubPlanBuilder:
         def load(name: str, default: Any = None) -> Any:
             return read_json(inventory / name, default)
 
-        repositories = [r for r in load("repositories.json", []) if not r.get("archived")]
+        repositories = load("repositories.json", [])
+        active = {r["name"] for r in repositories if not r.get("archived")}
         if not personal:
-            self._organization(inventory, {r["name"] for r in repositories})
+            self._organization(inventory, active)
         for repository in sorted(repositories, key=lambda r: r["name"]):
             repo = repository["name"]
+            # Every repository is managed, archived or not, so that archiving one on
+            # GitHub regenerates as archived = true rather than as a deletion.
             self.add_import("github_repository", repo, repo)
+            if repo not in active:
+                # GitHub makes an archived repository's contents read-only, so its
+                # repository-scoped configuration is neither discovered nor managed.
+                continue
             prefix = f"repositories/{repo}"
             for filename, rtype, field, separator in (
                 ("direct-collaborators", "github_repository_collaborator", "login", ":"),

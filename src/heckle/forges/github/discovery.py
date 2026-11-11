@@ -36,7 +36,7 @@ class GitHubInventoryExporter:
         self.coverage: dict[str, Any] = {
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "organization": org,
-            "skipped_archived_repositories": [],
+            "archived_repositories": [],
             "api_errors": [],
             "not_managed": [
                 "Secret values are intentionally not exported or managed.",
@@ -44,7 +44,7 @@ class GitHubInventoryExporter:
                 "Repository file contents such as workflows, CODEOWNERS, Dependabot YAML, issue templates, and pull-request templates remain managed through Git.",
                 "Pending organization invitations are inventoried only when the token can read them; they are not imported as memberships.",
                 "Inherited repository rulesets are not duplicated; only repository-owned rulesets are imported.",
-                "Archived repositories and their repository-scoped configuration are skipped.",
+                "Archived repositories are managed with archived = true, but their repository-scoped configuration (collaborators, team grants, protections, webhooks, secrets and so on) is not, because GitHub makes it read-only.",
                 "Provider coverage is calculated separately from API discovery.",
             ],
         }
@@ -119,21 +119,26 @@ class GitHubInventoryExporter:
             (repo for repo in repos if not repo.get("archived", False)),
             key=lambda item: item["name"].lower(),
         )
-        archived = sorted((repo["name"] for repo in repos if repo.get("archived", False)))
-        self.coverage["skipped_archived_repositories"] = archived
+        archived_repos = sorted(
+            (repo for repo in repos if repo.get("archived", False)),
+            key=lambda item: item["name"].lower(),
+        )
+        self.coverage["archived_repositories"] = [repo["name"] for repo in archived_repos]
         if not self.personal:
             self.export_members()
             self.export_teams()
             self.export_organization_configuration()
+        # Archived repositories stay in the configuration (archived = true) so that
+        # archiving one never looks like a deletion. Only their settings are read:
+        # GitHub makes everything inside an archived repository read-only.
+        work = [(self.export_repository, repo) for repo in active_repos]
+        work += [(self.export_repository_details, repo) for repo in archived_repos]
         if self.workers == 1:
-            for repo in active_repos:
-                self.export_repository(repo)
+            for export, repo in work:
+                export(repo)
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as executor:
-                futures = {
-                    executor.submit(self.export_repository, repo): repo["name"]
-                    for repo in active_repos
-                }
+                futures = {executor.submit(export, repo): repo["name"] for export, repo in work}
                 for future in concurrent.futures.as_completed(futures):
                     name = futures[future]
                     try:
@@ -279,14 +284,11 @@ class GitHubInventoryExporter:
         )
         self.save_inventory("organization-webhooks.json", org_hooks)
 
-    def export_repository(self, repo_summary: dict[str, Any]) -> None:
+    def export_repository_details(self, repo_summary: dict[str, Any]) -> dict[str, Any]:
         repo = repo_summary["name"]
-        qorg = quote(self.org)
-        qrepo = quote(repo)
-        prefix = f"repositories/{repo}"
         details = self.optional(
             f"repository:{repo}:details",
-            lambda: self.client.get(f"/repos/{qorg}/{qrepo}")[0],
+            lambda: self.client.get(f"/repos/{quote(self.org)}/{quote(repo)}")[0],
             repo_summary,
         )
         if self.personal:
@@ -297,7 +299,15 @@ class GitHubInventoryExporter:
                 raise GenerationError(
                     "GitHub repository moved or changed identity during discovery"
                 )
-        self.save_inventory(f"{prefix}/repository.json", details)
+        self.save_inventory(f"repositories/{repo}/repository.json", details)
+        return details
+
+    def export_repository(self, repo_summary: dict[str, Any]) -> None:
+        repo = repo_summary["name"]
+        qorg = quote(self.org)
+        qrepo = quote(repo)
+        prefix = f"repositories/{repo}"
+        self.export_repository_details(repo_summary)
         collaborators = self.optional(
             f"repository:{repo}:direct-collaborators",
             lambda: self.client.get_paginated(

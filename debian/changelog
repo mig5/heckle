@@ -1,3 +1,9 @@
+heckle (0.1.4-1) unstable; urgency=medium
+
+ * Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.
+
+ -- Miguel Jacq <mig@mig5.net>  Thu, 12 Nov 2026 07:35:00 +1100
+
 heckle (0.1.3-1) unstable; urgency=medium
 
  * Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
