@@ -29,6 +29,7 @@ DISTS=(
   debian:bookworm
   debian:trixie
   ubuntu:noble
+  ubuntu:resolute
 )
 for dist in "${DISTS[@]}"; do
   release=${dist#*:}
