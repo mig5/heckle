@@ -244,11 +244,21 @@ FAKE_TOFU = textwrap.dedent(
     targets = re.findall(r'to = (\\S+)\\n  id = "([^"]*)"', Path("imports.tf").read_text())
     state["plans"].append(len(targets))
     generated, failed = [], 0
-    for address, import_id in targets:
+    burst = state["burst_plans"] > 0
+    for index, (address, import_id) in enumerate(targets):
         print(f"{{address}}: Preparing import... [id={{import_id}}]")
-        if import_id in state["broken"] or state["used"] + state["cost"] > state["limit"]:
+        if import_id in state["broken"]:
+            reason = "404 Not Found []"
+        elif state["used"] + state["cost"] > state["limit"]:
+            reason = "403 API rate limit of 5000 still exceeded"
+        elif burst and index >= state["burst_after"]:
+            reason = "403 You have exceeded a secondary rate limit. Please wait a few\\n    minutes before you try again. []"
+        else:
+            reason = None
+        if reason:
             failed += 1
-            print("SECRET provider detail: API rate limit exceeded")
+            print("\\nError: GET https://api.github.com/repos/o/SECRET-repo: " + reason)
+            print(f"\\n  with {{address}},\\n  on imports.tf line 1:\\n\\nSECRET-detail\\n")
             continue
         state["used"] += state["cost"]
         print(f"{{address}}: Refreshing state... [id={{import_id}}]")
@@ -256,6 +266,8 @@ FAKE_TOFU = textwrap.dedent(
         generated.append(f'resource "github_repository" "{{name}}" {{{{\\n  name = "{{import_id}}"\\n}}}}\\n')
     if generated:
         Path("generated.tf").write_text("\\n".join(generated))
+    if burst:
+        state["burst_plans"] -= 1
     state_file.write_text(json.dumps(state))
     sys.exit(1 if failed else 0)
     """
@@ -265,12 +277,24 @@ FAKE_TOFU = textwrap.dedent(
 class Simulation:
     """The fake tofu's quota, as both the provider (via the file) and the probe see it."""
 
-    def __init__(self, tmp_path: Path, *, limit=5000, used=0, cost=3, broken=()):
+    def __init__(
+        self, tmp_path: Path, *, limit=5000, used=0, cost=3, broken=(), burst=(0, 0)
+    ):
+        tmp_path.mkdir(parents=True, exist_ok=True)
         self.path = tmp_path / "quota.json"
         self.reset = 1_800_000_000.0
+        burst_plans, burst_after = burst  # that many plans fail after burst_after reads
         self.path.write_text(
             json.dumps(
-                {"limit": limit, "used": used, "cost": cost, "broken": list(broken), "plans": []}
+                {
+                    "limit": limit,
+                    "used": used,
+                    "cost": cost,
+                    "broken": list(broken),
+                    "burst_plans": burst_plans,
+                    "burst_after": burst_after,
+                    "plans": [],
+                }
             )
         )
         self.sleeps: list[float] = []
@@ -370,10 +394,57 @@ def test_imports_lost_to_an_exhausted_quota_are_retried(tmp_path, monkeypatch):
 
 def test_a_genuine_failure_is_not_retried(tmp_path, monkeypatch):
     simulation = Simulation(tmp_path, broken=["repo-7"])
-    with pytest.raises(GenerationError, match=r"1 missing\); first: github_repository.r7"):
+    with pytest.raises(
+        GenerationError, match=r"\(1 missing; 1 failed: 1 not found\); first: github_repository.r7"
+    ):
         hydrate(tmp_path, monkeypatch, simulation, 50)
     assert simulation.state["plans"] == [50]
     assert simulation.sleeps == []
+
+
+def test_a_burst_rate_limit_cools_down_and_retries(tmp_path, monkeypatch):
+    """The reported run: plenty of hourly quota, then a burst limit in batch 4."""
+    simulation = Simulation(tmp_path, used=1481, cost=1, burst=(0, 0))
+    state = simulation.state
+    state["burst_plans"], state["burst_after"] = 0, 88
+    simulation.path.write_text(json.dumps(state))
+
+    # Fail only the fourth plan, as in the report.
+    original = simulation.quota
+    calls = {"plans": 0}
+
+    def quota():
+        current = simulation.state
+        if len(current["plans"]) == 3 and calls["plans"] == 0:
+            calls["plans"] = 1
+            current["burst_plans"] = 1
+            simulation.path.write_text(json.dumps(current))
+        return original()
+
+    simulation.quota = quota
+    resources, notes = hydrate(tmp_path, monkeypatch, simulation, 1539)
+    assert len(resources) == 1539
+    plans = simulation.state["plans"]
+    assert plans[:4] == [250, 250, 250, 250]
+    retry = [note for note in notes if "could not be read" in note]
+    assert len(retry) == 1
+    assert "162 import(s) could not be read (162 GitHub's secondary (burst) rate limit)" in retry[0]
+    assert "Waiting 1m00s before retrying them, in batches of at most 125" in retry[0]
+    assert "please be patient" in retry[0]
+    assert simulation.sleeps == [60.0]
+    assert max(plans[4:]) <= 125
+
+
+def test_a_persistent_burst_limit_gives_up_and_says_why(tmp_path, monkeypatch):
+    simulation = Simulation(tmp_path, burst=(99, 10))
+    with pytest.raises(GenerationError) as error:
+        hydrate(tmp_path, monkeypatch, simulation, 600)
+    message = str(error.value)
+    assert "GitHub's secondary (burst) rate limit" in message
+    assert "not attempted after that" in message
+    assert "SECRET" not in message
+    # Four cool-downs, each twice as long as the last.
+    assert simulation.sleeps == [60.0, 120.0, 240.0, 480.0]
 
 
 def test_without_a_quota_hydration_is_one_plan_as_before(tmp_path, monkeypatch):
@@ -387,10 +458,43 @@ def test_without_a_quota_hydration_is_one_plan_as_before(tmp_path, monkeypatch):
 
 def test_provider_output_is_counted_but_never_shown(tmp_path, monkeypatch):
     stream = io.StringIO()
-    simulation = Simulation(tmp_path, used=4990, cost=1)  # forces failed reads
-    with pytest.raises(GenerationError):
-        hydrate(tmp_path, monkeypatch, simulation, 40, quota=False, stream=stream)
-    assert "SECRET" not in stream.getvalue()
+    # Without a quota probe, rate-limited reads are retried after a cool-down.
+    simulation = Simulation(tmp_path, used=4990, cost=1)
+    resources, notes = hydrate(tmp_path, monkeypatch, simulation, 40, quota=False, stream=stream)
+    assert len(resources) == 40
+    output = stream.getvalue()
+    assert "30 import(s) could not be read (30 API rate limit)" in output
+    assert "SECRET" not in output
+
+    simulation = Simulation(tmp_path / "again", broken=["repo-3"])
+    with pytest.raises(GenerationError) as error:
+        hydrate(tmp_path / "again", monkeypatch, simulation, 5, quota=False, stream=stream)
+    assert "SECRET" not in str(error.value) + stream.getvalue()
+
+
+def test_failures_are_classified_without_keeping_their_text():
+    progress = HydrationProgress(4, "GitHub")
+    progress.start_batch()
+    for line in (
+        'a.b["x"]: Preparing import... [id=x]\n',
+        "│ Error: GET https://api.github.com/repos/o/SECRET: 403 You have exceeded a\n",
+        "│ secondary rate limit. Please wait.\n",
+        "│\n",
+        'a.b["y"]: Preparing import... [id=y]\n',
+        "Error: Cannot import non-existent remote object\n",
+        "Error: GET https://api.github.com/repos/o/r: 502 Bad Gateway []\n",
+        "Warning: something unrelated\n",
+        "Error: GET https://api.github.com/user: 401 Bad credentials []\n",
+    ):
+        progress.on_line(line)
+    progress.finish_batch(0)
+    assert dict(progress.failures) == {
+        "GitHub's secondary (burst) rate limit": 1,
+        "not found": 1,
+        "server or network error": 1,
+        "permission denied": 1,
+    }
+    assert "SECRET" not in repr(vars(progress))
 
 
 def test_progress_counts_import_lines():

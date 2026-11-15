@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import json
 import math
@@ -34,7 +35,49 @@ HYDRATION_MIN_BATCH = 25
 HYDRATION_RESERVE = 100  # requests left untouched for anything else using the token
 HYDRATION_INITIAL_COST = 3.0  # requests per import, until a batch has been measured
 HYDRATION_RATE_RETRIES = 3
+# Burst ("secondary") rate limits and server/network errors: cool down and retry.
+HYDRATION_TRANSIENT_RETRIES = 4
+HYDRATION_TRANSIENT_DELAY = 60.0  # doubled on each further retry
 HYDRATION_QUOTA_POLL = 30.0  # seconds between quota checks while a batch runs
+
+# Why the provider failed to read objects, classified from its error diagnostics.
+# Only these labels are kept; the diagnostics themselves are never stored or shown.
+# The flag says whether waiting and retrying can help.
+FAILURE_KINDS: tuple[tuple[str, re.Pattern[str], bool], ...] = (
+    (
+        "GitHub's secondary (burst) rate limit",
+        re.compile(r"secondary rate limit|abuse detection", re.I),
+        True,
+    ),
+    ("API rate limit", re.compile(r"rate limit", re.I), True),
+    (
+        "server or network error",
+        re.compile(
+            r"\b50[0234]\b|timed? ?out|connection (?:reset|refused)|unexpected EOF|"
+            r"TLS handshake|no such host|bad gateway|service unavailable",
+            re.I,
+        ),
+        True,
+    ),
+    ("not found", re.compile(r"\b404\b|not found|non-existent remote object", re.I), False),
+    (
+        "permission denied",
+        re.compile(r"\b40[13]\b|bad credentials|forbidden|not accessible|must have admin", re.I),
+        False,
+    ),
+)
+RETRYABLE_FAILURES = {label for label, _, retryable in FAILURE_KINDS if retryable}
+
+
+def classify_failure(text: str) -> str:
+    for label, pattern, _ in FAILURE_KINDS:
+        if pattern.search(text):
+            return label
+    return "other error"
+
+
+def describe_failures(failures: collections.Counter[str]) -> str:
+    return ", ".join(f"{count:,} {label}" for label, count in failures.most_common())
 
 # "<address>: Preparing import... [id=...]" / "<address>: Refreshing state... [id=...]".
 # Only the address is used, to count progress; provider output is never displayed.
@@ -51,6 +94,9 @@ class HydrationProgress:
         self.batch = 0
         self.quota: Quota | None = None
         self.waiting_until: float | None = None
+        # Failure diagnostics in the current batch, by kind (see FAILURE_KINDS).
+        self.failures: collections.Counter[str] = collections.Counter()
+        self._diagnostic: list[str] | None = None
         self._reading: set[str] = set()
         self._lock = threading.Lock()
 
@@ -58,17 +104,34 @@ class HydrationProgress:
         with self._lock:
             self.batch += 1
             self._reading = set()
+            self.failures = collections.Counter()
+            self._diagnostic = None
 
     def finish_batch(self, hydrated: int) -> None:
         with self._lock:
+            self._end_diagnostic()
             self.finished += hydrated
             self._reading = set()
 
+    def _end_diagnostic(self) -> None:
+        if self._diagnostic is not None:
+            self.failures[classify_failure(" ".join(self._diagnostic))] += 1
+            self._diagnostic = None
+
     def on_line(self, line: str) -> None:
         match = IMPORT_PROGRESS.match(line)
-        if match:
-            with self._lock:
+        # Diagnostics may be boxed (│) and wrapped; only their kind is recorded.
+        text = line.strip(" \t\r\n│╷╵")
+        with self._lock:
+            if match:
                 self._reading.add(match.group("address"))
+            if text.startswith("Error: "):
+                self._end_diagnostic()
+                self._diagnostic = [text[len("Error: ") :]]
+            elif text.startswith("Warning: ") or (match and self._diagnostic is not None):
+                self._end_diagnostic()
+            elif self._diagnostic is not None and len(self._diagnostic) < 40:
+                self._diagnostic.append(text)
 
     def describe(self) -> str:
         with self._lock:
@@ -340,11 +403,17 @@ class TfRunner:
             stop.set()
             thread.join()
 
-    def _next_batch_size(self, pending: int, cost: float, progress: HydrationProgress) -> int:
+    def _next_batch_size(
+        self,
+        pending: int,
+        cost: float,
+        progress: HydrationProgress,
+        largest: int = HYDRATION_MAX_BATCH,
+    ) -> int:
         """How many imports to read next, waiting for a quota reset if none fit."""
         if self.quota is None:
-            return pending  # no quota to respect: one plan, as before
-        wanted = min(pending, HYDRATION_MAX_BATCH)
+            return min(pending, largest)  # no quota to respect: one plan, as before
+        wanted = min(pending, largest)
         while True:
             quota = self._probe(progress)
             if quota is None:
@@ -406,8 +475,16 @@ class TfRunner:
         found = {resource.address for resource in resources}
         missing = [address for address, _ in provider.imports(plan) if address not in found]
         if missing:
+            unattempted = getattr(self, "hydration_unattempted", 0)
+            failures = getattr(self, "hydration_failures", collections.Counter())
+            detail = f"{len(missing) - unattempted:,} failed"
+            if failures:
+                detail += f": {describe_failures(failures)}"
+            if unattempted:
+                detail += f"; {unattempted:,} not attempted after that"
             raise GenerationError(
-                f"Provider hydration did not return all import targets ({len(missing)} missing); first: {missing[0]}. No output was published."
+                f"Provider hydration did not return all import targets ({len(missing):,} "
+                f"missing; {detail}); first: {missing[0]}. No output was published."
             )
         return resources, schema
 
@@ -426,6 +503,10 @@ class TfRunner:
         files: list[Path] = []
         cost = HYDRATION_INITIAL_COST
         rate_retries = 0
+        transient_retries = 0
+        largest = len(pending) if self.quota is None else HYDRATION_MAX_BATCH
+        self.hydration_failures: collections.Counter[str] = collections.Counter()
+        self.hydration_unattempted = 0
         if pending and self.quota is not None:
             quota = self._probe(progress)
             if quota is not None:
@@ -436,7 +517,7 @@ class TfRunner:
                 )
         with self.activity.running("Hydrating", progress.describe), self._watch_quota(progress):
             while pending:
-                size = self._next_batch_size(len(pending), cost, progress)
+                size = self._next_batch_size(len(pending), cost, progress, largest)
                 batch, pending = pending[:size], pending[size:]
                 before = progress.quota
                 progress.start_batch()
@@ -479,7 +560,32 @@ class TfRunner:
                     )
                     pending = missing + pending
                     continue
-                break  # a genuine failure; reported by the caller
+                failures = progress.failures
+                retryable = sum(failures[kind] for kind in RETRYABLE_FAILURES)
+                if retryable and transient_retries < HYDRATION_TRANSIENT_RETRIES:
+                    delay = HYDRATION_TRANSIENT_DELAY * 2**transient_retries
+                    transient_retries += 1
+                    # Smaller batches put less load on the API in any one minute.
+                    largest = max(HYDRATION_MIN_BATCH, min(largest, len(batch)) // 2)
+                    self.activity.note(
+                        f"{len(missing):,} import(s) could not be read "
+                        f"({describe_failures(failures)}). Waiting "
+                        f"{format_duration(delay)} before retrying them, in batches of at most "
+                        f"{largest:,} (retry {transient_retries} of "
+                        f"{HYDRATION_TRANSIENT_RETRIES}). Heckle is still working; please be "
+                        "patient."
+                    )
+                    progress.waiting_until = time.time() + delay
+                    try:
+                        self.sleep(delay)
+                    finally:
+                        progress.waiting_until = None
+                    pending = missing + pending
+                    continue
+                # Not retryable, or out of retries: the caller reports it.
+                self.hydration_failures = failures
+                self.hydration_unattempted = len(pending)
+                break
         # Leave every import block in place, as a single plan would have, for a
         # workspace kept for diagnostics (--keep-workdir).
         write_imports(workspace / "imports.tf", targets)

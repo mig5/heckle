@@ -72,7 +72,9 @@ shows a live status line (or, when output is not a terminal, a "still working" l
 every minute). It keeps within the forge's API quota rather than running it dry:
 discovery pauses before the quota is used up, and GitHub hydration reads objects in
 batches sized to what is left, waiting for the quota to reset when the next batch
-won't fit. Each wait is announced with the time it ends.
+won't fit. Reads that fail because of a rate limit, including GitHub's limit on
+bursts of requests, or a server or network error are retried after a cool-down.
+Each wait is announced with the time it ends.
 
 ## Personal accounts
 
