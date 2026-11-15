@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import math
 import os
 import re
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Callable, Sequence
+import threading
+import time
+from typing import Callable, Iterator, Sequence
 
+from heckle.activity import Activity, format_clock, format_duration
 from heckle.tf_version import TF_MIN_VERSION, TF_MAX_VERSION, TF_VERSION_CONSTRAINT
 from heckle.config import Connection
 from heckle.core.compilation import ImportPlan
@@ -18,12 +23,85 @@ from heckle.hcl.parser import extract_top_blocks, parse_resource
 from heckle.hcl.schema import ProviderSchema
 from heckle.hcl.types import Resource
 from heckle.hcl.render import hcl_string
+from heckle.forges.shared.http import FORGE_NAMES, Quota
 from heckle.providers.base import ProviderAdapter
 
+# Hydration reads every import target through the provider in `plan` runs. Where
+# the forge reports a quota, the imports are split into batches sized to what is
+# left of it, so a large organization waits for a reset instead of failing halfway.
+HYDRATION_MAX_BATCH = 250
+HYDRATION_MIN_BATCH = 25
+HYDRATION_RESERVE = 100  # requests left untouched for anything else using the token
+HYDRATION_INITIAL_COST = 3.0  # requests per import, until a batch has been measured
+HYDRATION_RATE_RETRIES = 3
+HYDRATION_QUOTA_POLL = 30.0  # seconds between quota checks while a batch runs
 
-def collect_resources(flat: Path, extra: Path) -> list[Resource]:
+# "<address>: Preparing import... [id=...]" / "<address>: Refreshing state... [id=...]".
+# Only the address is used, to count progress; provider output is never displayed.
+IMPORT_PROGRESS = re.compile(r"^(?P<address>\S.*?): (?:Preparing import|Refreshing state)\.\.\.")
+
+
+class HydrationProgress:
+    """Counters behind the live hydration status line."""
+
+    def __init__(self, total: int, forge: str) -> None:
+        self.total = total
+        self.forge = forge
+        self.finished = 0
+        self.batch = 0
+        self.quota: Quota | None = None
+        self.waiting_until: float | None = None
+        self._reading: set[str] = set()
+        self._lock = threading.Lock()
+
+    def start_batch(self) -> None:
+        with self._lock:
+            self.batch += 1
+            self._reading = set()
+
+    def finish_batch(self, hydrated: int) -> None:
+        with self._lock:
+            self.finished += hydrated
+            self._reading = set()
+
+    def on_line(self, line: str) -> None:
+        match = IMPORT_PROGRESS.match(line)
+        if match:
+            with self._lock:
+                self._reading.add(match.group("address"))
+
+    def describe(self) -> str:
+        with self._lock:
+            done = min(self.total, self.finished + len(self._reading))
+            parts = [f"{done:,}/{self.total:,} imports read"]
+            if self.batch:
+                parts.append(f"batch {self.batch}")
+        if self.waiting_until is not None:
+            parts.append(
+                f"waiting for the {self.forge} API quota to reset at "
+                f"{format_clock(self.waiting_until)}"
+            )
+        elif self.quota is not None:
+            parts.append(
+                f"{self.forge} API quota {self.quota.remaining:,}/{self.quota.limit:,}, "
+                f"resets {format_clock(self.quota.reset)}"
+            )
+        return " · ".join(parts)
+
+
+def write_imports(path: Path, targets: Sequence[tuple[str, str]]) -> None:
+    path.write_text(
+        "\n".join(
+            f"import {{\n  to = {address}\n  id = {hcl_string(import_id)}\n}}\n"
+            for address, import_id in targets
+        ),
+        encoding="utf-8",
+    )
+
+
+def collect_resources(*paths: Path) -> list[Resource]:
     output: dict[str, Resource] = {}
-    for path in (flat, extra):
+    for path in paths:
         if not path.is_file():
             continue
         blocks, _ = extract_top_blocks(path)
@@ -67,6 +145,10 @@ class TfRunner:
         self.connection = connection
         self.last_arguments: tuple[str, ...] | None = None
         self.last_cwd: Path | None = None
+        # Set by the pipeline: where progress goes, and how to read the forge's quota.
+        self.activity = Activity()
+        self.quota: Callable[[], Quota | None] | None = None
+        self.sleep: Callable[[float], None] = time.sleep
 
     def check_version(self, cwd: Path) -> str:
         """Fail before discovery, without exposing subprocess output or secrets."""
@@ -152,6 +234,7 @@ class TfRunner:
         *,
         allow_failure: bool = False,
         managed_state: bool = False,
+        on_line: Callable[[str], None] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         allowed = {"init", "plan", "show", "fmt", "validate", "providers", "state"}
         if not arguments or arguments[0] not in allowed:
@@ -161,15 +244,23 @@ class TfRunner:
         self.last_arguments = tuple(arguments)
         self.last_cwd = Path(cwd).resolve()
         try:
-            result = subprocess.run(
-                [self.executable, *arguments],
-                cwd=cwd,
-                env=self.environment(managed_state=managed_state),
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
+            if on_line is None:
+                result = subprocess.run(
+                    [self.executable, *arguments],
+                    cwd=cwd,
+                    env=self.environment(managed_state=managed_state),
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                )
+            else:
+                result = self._run_streaming(
+                    [self.executable, *arguments],
+                    cwd,
+                    self.environment(managed_state=managed_state),
+                    on_line,
+                )
         except OSError as exc:
             raise GenerationError(f"Unable to run {self.tool_name}: {exc.strerror}") from exc
         if result.returncode and not allow_failure:
@@ -179,6 +270,113 @@ class TfRunner:
                 f"{self.tool_name} {' '.join(arguments[:2])} failed (exit {result.returncode}). Run the same command in a private workspace for detailed diagnostics."
             )
         return result
+
+    @staticmethod
+    def _run_streaming(
+        command: list[str], cwd: Path, env: dict[str, str], on_line: Callable[[str], None]
+    ) -> subprocess.CompletedProcess[str]:
+        """Like subprocess.run, but hands each output line to on_line as it arrives.
+
+        The output is still only held privately, exactly as with subprocess.run.
+        """
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        lines: list[str] = []
+        try:
+            assert process.stdout is not None
+            for line in process.stdout:
+                lines.append(line)
+                on_line(line)
+            returncode = process.wait()
+        finally:
+            if process.poll() is None:  # interrupted: don't leave tofu running
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        return subprocess.CompletedProcess(command, returncode, stdout="".join(lines))
+
+    @property
+    def forge_name(self) -> str:
+        forge = self.connection.source.forge if self.connection else ""
+        return FORGE_NAMES.get(forge, forge or "forge")
+
+    def _probe(self, progress: HydrationProgress | None = None) -> Quota | None:
+        if self.quota is None:
+            return None
+        try:
+            quota = self.quota()
+        except Exception:  # an unreadable quota just means no pacing
+            return None
+        if progress is not None and quota is not None:
+            progress.quota = quota
+        return quota
+
+    @contextlib.contextmanager
+    def _watch_quota(self, progress: HydrationProgress) -> Iterator[None]:
+        """Refresh the displayed quota while a long batch runs."""
+        if self.quota is None:
+            yield
+            return
+        stop = threading.Event()
+
+        def poll() -> None:
+            while not stop.wait(HYDRATION_QUOTA_POLL):
+                self._probe(progress)
+
+        thread = threading.Thread(target=poll, name="heckle-quota", daemon=True)
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join()
+
+    def _next_batch_size(self, pending: int, cost: float, progress: HydrationProgress) -> int:
+        """How many imports to read next, waiting for a quota reset if none fit."""
+        if self.quota is None:
+            return pending  # no quota to respect: one plan, as before
+        wanted = min(pending, HYDRATION_MAX_BATCH)
+        while True:
+            quota = self._probe(progress)
+            if quota is None:
+                return wanted
+            affordable = int((quota.remaining - HYDRATION_RESERVE) / cost)
+            if affordable >= min(wanted, HYDRATION_MIN_BATCH) or quota.remaining >= quota.limit:
+                return max(1, min(wanted, affordable))
+            now = time.time()
+            resume = quota.reset + 2
+            if resume <= now:
+                self.sleep(2)  # the window has just ended; read the new one
+                continue
+            self.activity.note(
+                f"{self.forge_name} API quota is low: {quota.remaining:,} of {quota.limit:,} "
+                f"requests left, and the next {wanted:,} imports need about "
+                f"{math.ceil(wanted * cost):,}. Waiting until {format_clock(resume)} (about "
+                f"{format_duration(resume - now)}) for it to reset. "
+                "Heckle is still working; please be patient."
+            )
+            progress.waiting_until = resume
+            try:
+                self.sleep(resume - now)
+            finally:
+                progress.waiting_until = None
+
+    @staticmethod
+    def _calibrate(cost: float, before: Quota | None, after: Quota | None, count: int) -> float:
+        """Requests per import, measured from the last batch where possible."""
+        if before is None or after is None or not count or after.reset != before.reset:
+            return cost
+        used = before.remaining - after.remaining
+        return max(0.5, used / count) if used > 0 else cost
 
     def hydrate(
         self, provider: ProviderAdapter, plan: ImportPlan, workspace: Path
@@ -200,28 +398,11 @@ class TfRunner:
             raise GenerationError(
                 "Pinned provider lacks configured import resource types: " + ", ".join(names)
             )
-        imports = "\n".join(
-            f"import {{\n  to = {address}\n  id = {hcl_string(import_id)}\n}}\n"
-            for address, import_id in provider.imports(plan)
-        )
-        (workspace / "imports.tf").write_text(imports, encoding="utf-8")
         extra = workspace / "sensitive-metadata.tf"
         extra.write_text(provider.bootstrap_extra(plan), encoding="utf-8")
         extra.chmod(0o600)
-        flat = workspace / "generated.tf"
-        if plan.candidates:
-            self.run(
-                [
-                    "plan",
-                    "-input=false",
-                    "-lock=false",
-                    "-no-color",
-                    "-generate-config-out=generated.tf",
-                ],
-                workspace,
-                allow_failure=True,
-            )
-        resources = collect_resources(flat, extra)
+        files = self._hydrate_in_batches(provider.imports(plan), workspace)
+        resources = collect_resources(*files, extra)
         found = {resource.address for resource in resources}
         missing = [address for address, _ in provider.imports(plan) if address not in found]
         if missing:
@@ -229,6 +410,80 @@ class TfRunner:
                 f"Provider hydration did not return all import targets ({len(missing)} missing); first: {missing[0]}. No output was published."
             )
         return resources, schema
+
+    def _hydrate_in_batches(
+        self, targets: Sequence[tuple[str, str]], workspace: Path
+    ) -> list[Path]:
+        """Generate configuration for every import target; returns the generated files.
+
+        Each batch's generated file is moved out of the workspace before the next
+        plan, which would otherwise read it as configuration.
+        """
+        hydrated = workspace / "hydrated"
+        hydrated.mkdir(mode=0o700)
+        pending = list(targets)
+        progress = HydrationProgress(len(pending), self.forge_name)
+        files: list[Path] = []
+        cost = HYDRATION_INITIAL_COST
+        rate_retries = 0
+        if pending and self.quota is not None:
+            quota = self._probe(progress)
+            if quota is not None:
+                self.activity.note(
+                    f"Reading {len(pending):,} objects in batches sized to the {self.forge_name} "
+                    f"API quota ({quota.remaining:,} of {quota.limit:,} requests left, resets "
+                    f"{format_clock(quota.reset)})."
+                )
+        with self.activity.running("Hydrating", progress.describe), self._watch_quota(progress):
+            while pending:
+                size = self._next_batch_size(len(pending), cost, progress)
+                batch, pending = pending[:size], pending[size:]
+                before = progress.quota
+                progress.start_batch()
+                write_imports(workspace / "imports.tf", batch)
+                self.run(
+                    [
+                        "plan",
+                        "-input=false",
+                        "-lock=false",
+                        "-no-color",
+                        "-generate-config-out=generated.tf",
+                    ],
+                    workspace,
+                    allow_failure=True,
+                    on_line=progress.on_line,
+                )
+                generated = workspace / "generated.tf"
+                found: set[str] = set()
+                if generated.exists():
+                    part = hydrated / f"batch-{len(files) + 1:04d}.tf"
+                    generated.replace(part)
+                    files.append(part)
+                    found = {resource.address for resource in collect_resources(part)}
+                missing = [target for target in batch if target[0] not in found]
+                after = self._probe(progress)
+                cost = self._calibrate(cost, before, after, len(batch))
+                progress.finish_batch(len(batch) - len(missing))
+                if not missing:
+                    continue
+                exhausted = after is not None and (
+                    after.remaining <= HYDRATION_RESERVE
+                    or (before is not None and after.reset > before.reset)
+                )
+                if exhausted and rate_retries < HYDRATION_RATE_RETRIES:
+                    rate_retries += 1
+                    self.activity.note(
+                        f"{len(missing):,} import(s) could not be read while the "
+                        f"{self.forge_name} API quota was exhausted; retrying them once it "
+                        "resets."
+                    )
+                    pending = missing + pending
+                    continue
+                break  # a genuine failure; reported by the caller
+        # Leave every import block in place, as a single plan would have, for a
+        # workspace kept for diagnostics (--keep-workdir).
+        write_imports(workspace / "imports.tf", targets)
+        return files
 
     def format(self, root: Path) -> None:
         self.run(["fmt", "-recursive", "-no-color"], root)

@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from heckle import __version__
+from heckle.activity import Activity
 from heckle.config import Connection
 from heckle.core.identifiers import filesystem_name
 from heckle.core.model import FORGES
@@ -190,8 +191,9 @@ def main(argv: list[str] | None = None) -> int:
             allow_untested_provider=getattr(args, "allow_untested_provider", False),
             keep_workdir=getattr(args, "keep_workdir", False),
         )
+        activity = Activity(sys.stderr)
         destination = Pipeline(
-            connection, options, progress=lambda message: print(message, file=sys.stderr)
+            connection, options, progress=activity.note, activity=activity
         ).run(inventory_only=inventory)
         print(
             f"Wrote {'inventory' if inventory else 'standalone Terraform/OpenTofu project'}: {destination}"

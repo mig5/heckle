@@ -67,6 +67,13 @@ heckle generate gitea --org example --url https://git.example.org
 heckle generate forgejo --org example --url https://code.example.org
 ```
 
+A large organization can take a long time, mostly spent in API requests. Heckle
+shows a live status line (or, when output is not a terminal, a "still working" line
+every minute). It keeps within the forge's API quota rather than running it dry:
+discovery pauses before the quota is used up, and GitHub hydration reads objects in
+batches sized to what is left, waiting for the quota to reset when the next batch
+won't fit. Each wait is announced with the time it ends.
+
 ## Personal accounts
 
 The same selectors work for all four forges, with both `generate` and `inventory`:

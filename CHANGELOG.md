@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+* Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.
+
 ## 0.1.5
 
 * Give archived GitHub repositories their own block that ignores unreadable settings

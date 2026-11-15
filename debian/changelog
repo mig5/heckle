@@ -1,3 +1,9 @@
+heckle (0.1.6-1) unstable; urgency=medium
+
+ * Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.
+
+ -- Miguel Jacq <mig@mig5.net>  Mon, 16 Nov 2026 10:34:00 +1100
+
 heckle (0.1.5-1) unstable; urgency=medium
 
  * Give archived GitHub repositories their own block that ignores unreadable settings

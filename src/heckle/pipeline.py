@@ -11,6 +11,7 @@ import shutil
 import shlex
 from typing import Callable
 
+from heckle.activity import Activity
 from heckle.config import Connection
 from heckle.core.inventory import load_inventory, save_inventory
 from heckle.core.model import ForgeModel, Source
@@ -320,6 +321,7 @@ class Pipeline:
         runner: TfRunner | None = None,
         forge: object | None = None,
         progress: Callable[[str], None] = print,
+        activity: Activity | None = None,
     ) -> None:
         self.connection = connection
         self.options = options
@@ -338,6 +340,11 @@ class Pipeline:
             )
         self.runner = runner
         self.progress = progress
+        # A live status line for long steps; without one, notes go to `progress`.
+        self.activity = activity or Activity(note=progress)
+        client = getattr(self.forge, "client", None)
+        if client is not None and hasattr(client, "notify"):
+            client.notify = self.activity.note
 
     def discover(self, workspace: Path) -> ForgeModel:
         if self.options.from_inventory:
@@ -357,7 +364,10 @@ class Pipeline:
         self.progress(
             f"Discovering {self.connection.source.forge} configuration for {self.connection.source.scope}."
         )
-        model = self.forge.discover(workspace)
+        client = getattr(self.forge, "client", None)
+        describe = getattr(client, "describe", None)
+        with self.activity.running("Discovering", describe if callable(describe) else str):
+            model = self.forge.discover(workspace)
         if self.connection.source.resolved and not self.connection.source.matches(model.source):
             raise GenerationError("Discovered source does not match the requested namespace")
         self.connection = replace(self.connection, source=model.source)
@@ -407,6 +417,9 @@ class Pipeline:
         try:
             if not inventory_only:
                 self.runner = self.runner or TfRunner(self.options.tf, self.connection)
+                self.runner.activity = self.activity
+                # Hydration paces itself to the forge's quota where it can read it.
+                self.runner.quota = getattr(getattr(self.forge, "client", None), "quota", None)
                 self.progress("Checking Terraform/OpenTofu version before discovery.")
                 self.runner.check_version(work)
             model = self.discover(work)
