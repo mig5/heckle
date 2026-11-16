@@ -1,4 +1,4 @@
-%{!?upstream_version:%global upstream_version 0.1.6
+%{!?upstream_version:%global upstream_version 0.1.6}
 
 Name:           heckle
 Version:        %{upstream_version}
