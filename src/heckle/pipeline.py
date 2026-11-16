@@ -570,6 +570,11 @@ class Pipeline:
             )
             report["partial_generation_allowed"] = self.options.allow_partial
             report["adoption_safety"] = adoption_safety
+            per_object = getattr(self.runner, "hydration_requests_per_object", None)
+            if per_object:
+                # Reading an object costs about the same in any later plan; heckle-sync
+                # uses this to wait for enough API quota before planning.
+                report["hydration"] = {"api_requests_per_object": per_object}
             audit = output / ".generation"
             write_private_json(audit / "report.json", report)
             write_private_json(audit / "source.json", asdict(model.source))

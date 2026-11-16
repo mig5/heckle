@@ -367,6 +367,7 @@ def hydrate(
         model=SimpleNamespace(source=None),
     )
     resources, _ = runner.hydrate(provider, plan, tmp_path / "workspace")
+    hydrate.last_runner = runner
     return resources, notes
 
 
@@ -374,6 +375,8 @@ def test_ample_quota_reads_everything_in_capped_batches(tmp_path, monkeypatch):
     simulation = Simulation(tmp_path)
     resources, notes = hydrate(tmp_path, monkeypatch, simulation, 600)
     assert len(resources) == 600
+    # Every import really cost 3 requests; heckle-sync plans its own reads from this.
+    assert hydrate.last_runner.hydration_requests_per_object == 3.0
     assert simulation.state["plans"] == [250, 250, 100]
     assert simulation.sleeps == []
     assert "Reading 600 objects in batches sized to the GitHub API quota" in notes[0]

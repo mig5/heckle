@@ -514,6 +514,8 @@ class TfRunner:
         largest = len(pending) if self.quota is None else HYDRATION_MAX_BATCH
         self.hydration_failures: collections.Counter[str] = collections.Counter()
         self.hydration_unattempted: set[str] = set()
+        # What reading objects really cost, for callers planning their own reads.
+        measured_requests = measured_objects = 0
         if pending and self.quota is not None:
             quota = self._probe(progress)
             if quota is not None:
@@ -555,6 +557,11 @@ class TfRunner:
                 ]
                 after = self._probe(progress)
                 cost = self._calibrate(cost, before, after, len(batch))
+                if before is not None and after is not None and after.reset == before.reset:
+                    used = before.remaining - after.remaining
+                    if used > 0:
+                        measured_requests += used
+                        measured_objects += len(batch)
                 progress.finish_batch(len(batch) - len(missing))
                 if not missing:
                     continue
@@ -597,6 +604,9 @@ class TfRunner:
                 self.hydration_failures = failures
                 self.hydration_unattempted = {address for address, _ in pending}
                 break
+        self.hydration_requests_per_object = (
+            round(measured_requests / measured_objects, 2) if measured_objects else None
+        )
         # Leave every import block in place, as a single plan would have, for a
         # workspace kept for diagnostics (--keep-workdir).
         write_imports(workspace / "imports.tf", targets)
