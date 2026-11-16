@@ -470,12 +470,16 @@ class TfRunner:
         extra = workspace / "sensitive-metadata.tf"
         extra.write_text(provider.bootstrap_extra(plan), encoding="utf-8")
         extra.chmod(0o600)
-        files = self._hydrate_in_batches(provider.imports(plan), workspace)
+        # Webhooks and secrets are configured by hand (GitHub never returns their
+        # secret values), so OpenTofu generates nothing for them.
+        configured = {resource.address for resource in collect_resources(extra)}
+        files = self._hydrate_in_batches(provider.imports(plan), workspace, configured)
         resources = collect_resources(*files, extra)
         found = {resource.address for resource in resources}
         missing = [address for address, _ in provider.imports(plan) if address not in found]
         if missing:
-            unattempted = getattr(self, "hydration_unattempted", 0)
+            skipped = getattr(self, "hydration_unattempted", set())
+            unattempted = sum(1 for address in missing if address in skipped)
             failures = getattr(self, "hydration_failures", collections.Counter())
             detail = f"{len(missing) - unattempted:,} failed"
             if failures:
@@ -489,7 +493,10 @@ class TfRunner:
         return resources, schema
 
     def _hydrate_in_batches(
-        self, targets: Sequence[tuple[str, str]], workspace: Path
+        self,
+        targets: Sequence[tuple[str, str]],
+        workspace: Path,
+        configured: set[str] = frozenset(),
     ) -> list[Path]:
         """Generate configuration for every import target; returns the generated files.
 
@@ -506,7 +513,7 @@ class TfRunner:
         transient_retries = 0
         largest = len(pending) if self.quota is None else HYDRATION_MAX_BATCH
         self.hydration_failures: collections.Counter[str] = collections.Counter()
-        self.hydration_unattempted = 0
+        self.hydration_unattempted: set[str] = set()
         if pending and self.quota is not None:
             quota = self._probe(progress)
             if quota is not None:
@@ -541,7 +548,11 @@ class TfRunner:
                     generated.replace(part)
                     files.append(part)
                     found = {resource.address for resource in collect_resources(part)}
-                missing = [target for target in batch if target[0] not in found]
+                missing = [
+                    target
+                    for target in batch
+                    if target[0] not in found and target[0] not in configured
+                ]
                 after = self._probe(progress)
                 cost = self._calibrate(cost, before, after, len(batch))
                 progress.finish_batch(len(batch) - len(missing))
@@ -584,7 +595,7 @@ class TfRunner:
                     continue
                 # Not retryable, or out of retries: the caller reports it.
                 self.hydration_failures = failures
-                self.hydration_unattempted = len(pending)
+                self.hydration_unattempted = {address for address, _ in pending}
                 break
         # Leave every import block in place, as a single plan would have, for a
         # workspace kept for diagnostics (--keep-workdir).

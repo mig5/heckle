@@ -242,6 +242,13 @@ FAKE_TOFU = textwrap.dedent(
     assert not Path("generated.tf").exists()
     assert not list(Path(".").glob("hydrated/*.tf")) or True
     targets = re.findall(r'to = (\\S+)\\n  id = "([^"]*)"', Path("imports.tf").read_text())
+    configured = set()
+    for tf in Path(".").glob("*.tf"):
+        if tf.name != "imports.tf":
+            configured.update(
+                "github_repository." + name
+                for name in re.findall(r'resource "github_repository" "([^"]+)"', tf.read_text())
+            )
     state["plans"].append(len(targets))
     generated, failed = [], 0
     burst = state["burst_plans"] > 0
@@ -262,6 +269,8 @@ FAKE_TOFU = textwrap.dedent(
             continue
         state["used"] += state["cost"]
         print(f"{{address}}: Refreshing state... [id={{import_id}}]")
+        if address in configured:
+            continue  # already configured (e.g. a hand-written webhook): nothing generated
         name = address.split(".", 1)[1]
         generated.append(f'resource "github_repository" "{{name}}" {{{{\\n  name = "{{import_id}}"\\n}}}}\\n')
     if generated:
@@ -315,7 +324,9 @@ class Simulation:
         self.reset += 3600
 
 
-def hydrate(tmp_path, monkeypatch, simulation, count, *, quota=True, stream=None):
+def hydrate(
+    tmp_path, monkeypatch, simulation, count, *, quota=True, stream=None, hand_written=()
+):
     binary = tmp_path / "bin" / "tofu"
     binary.parent.mkdir()
     binary.write_text(FAKE_TOFU.format(python=sys.executable, state=str(simulation.path)))
@@ -345,7 +356,11 @@ def hydrate(tmp_path, monkeypatch, simulation, count, *, quota=True, stream=None
             configuration_hcl=lambda source: "",
         ),
         imports=lambda plan: targets,
-        bootstrap_extra=lambda plan: "",
+        # Like webhooks and secrets: imported, but configured by hand.
+        bootstrap_extra=lambda plan: "".join(
+            f'resource "github_repository" "r{i}" {{\n  name = "repo-{i}"\n}}\n'
+            for i in hand_written
+        ),
     )
     plan = SimpleNamespace(
         candidates=[SimpleNamespace(resource_type="github_repository")] * count,
@@ -514,3 +529,24 @@ def test_progress_counts_import_lines():
     assert "GitHub API quota 1,234/5,000" in progress.describe()
     progress.waiting_until = 1_800_000_000
     assert "waiting for the GitHub API quota to reset" in progress.describe()
+
+
+def test_hand_written_targets_are_not_mistaken_for_failures(tmp_path, monkeypatch):
+    """The reported "-88 failed": webhooks and secrets get no generated configuration."""
+    hand_written = range(5, 600, 6)  # 100 of them, spread through every batch
+    simulation = Simulation(tmp_path)
+    resources, notes = hydrate(tmp_path, monkeypatch, simulation, 600, hand_written=hand_written)
+    assert len(resources) == 600
+    assert simulation.state["plans"] == [250, 250, 100]
+    assert simulation.sleeps == []
+    assert not any("could not be read" in note for note in notes)
+
+
+def test_failure_counts_never_go_negative(tmp_path, monkeypatch):
+    simulation = Simulation(tmp_path, broken=["repo-300"])
+    with pytest.raises(GenerationError) as error:
+        hydrate(tmp_path, monkeypatch, simulation, 600, hand_written=range(0, 600, 7))
+    message = str(error.value)
+    # repo-300 is in batch 2; batch 3 (500-599) is never attempted, 14 of which are
+    # hand-written and so not missing.
+    assert "87 missing; 1 failed: 1 not found; 86 not attempted after that" in message
