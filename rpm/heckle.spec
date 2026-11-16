@@ -1,4 +1,4 @@
-%{!?upstream_version:%global upstream_version 0.1.6}
+%{!?upstream_version:%global upstream_version 0.1.7}
 
 Name:           heckle
 Version:        %{upstream_version}
@@ -40,6 +40,8 @@ requirement for generation and validation, not inventory or coverage reporting.
 %{_bindir}/heckle
 
 %changelog
+* Mon Nov 16 2026 Miguel Jacq <mig@mig5.net> - 0.1.7-1
+- GitHub: manage only the organization's own roles. GitHub's predefined roles and roles defined by the enterprise are reported as not managed; a predefined role GitHub added with a base role the provider rejects ("moderate") made every plan fail.
 * Mon Nov 16 2026 Miguel Jacq <mig@mig5.net> - 0.1.6-1
 - Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.
 * Thu Nov 12 2026 Miguel Jacq <mig@mig5.net> - 0.1.5-1

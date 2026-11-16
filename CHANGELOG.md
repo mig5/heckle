@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+* GitHub: manage only the organization's own roles. GitHub's predefined roles and roles defined by the enterprise are reported as not managed; a predefined role GitHub added with a base role the provider rejects ("moderate") made every plan fail.
+
 ## 0.1.6
 
 * Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.

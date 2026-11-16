@@ -1,26 +1,32 @@
+heckle (0.1.7-1) unstable; urgency=medium
+
+  * GitHub: manage only the organization's own roles. GitHub's predefined roles and roles defined by the enterprise are reported as not managed; a predefined role GitHub added with a base role the provider rejects ("moderate") made every plan fail.
+
+ -- Miguel Jacq <mig@mig5.net>  Mon, 16 Nov 2026 11:48:00 +1100
+
 heckle (0.1.6-1) unstable; urgency=medium
 
- * Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.
+  * Show feedback when working with upstream APIs that might take a long time or require back-off due to rate limiting.
 
  -- Miguel Jacq <mig@mig5.net>  Mon, 16 Nov 2026 10:34:00 +1100
 
 heckle (0.1.5-1) unstable; urgency=medium
 
- * Give archived GitHub repositories their own block that ignores unreadable settings
+  * Give archived GitHub repositories their own block that ignores unreadable settings
 
  -- Miguel Jacq <mig@mig5.net>  Thu, 12 Nov 2026 09:15:00 +1100
 
 heckle (0.1.4-1) unstable; urgency=medium
 
- * Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.
+  * Track archived projects so that on a re-sync of a project, they don't get dropped and then attempted to be deleted.
 
  -- Miguel Jacq <mig@mig5.net>  Thu, 12 Nov 2026 07:35:00 +1100
 
 heckle (0.1.3-1) unstable; urgency=medium
 
- * Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
- * Explain provider bootstrap progress and why resource HCL has not yet been generated at that stage.
- * Fix allowed_actions empty string for orgs in Github provider
+  * Check Terraform/OpenTofu compatibility before discovery or inventory replay, reporting the selected executable, unsupported version and required range. Inventory-only commands remain independent of the CLI.
+  * Explain provider bootstrap progress and why resource HCL has not yet been generated at that stage.
+  * Fix allowed_actions empty string for orgs in Github provider
 
  -- Miguel Jacq <mig@mig5.net>  Thu, 1 Oct 2026 10:35:00 +1000
 

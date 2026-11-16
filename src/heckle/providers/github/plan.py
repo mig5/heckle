@@ -37,6 +37,27 @@ class GitHubPlanBuilder:
     def note_not_managed(self, message: str) -> None:
         self.notes.append(message)
 
+    def _own_organization_roles(self, roles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Only the roles the organization itself defines.
+
+        GitHub's list of organization roles also returns its own predefined roles
+        and any defined by the enterprise. Neither can be changed from the
+        organization, and GitHub adds predefined roles over time, sometimes with
+        values the provider does not yet accept (e.g. base_role = "moderate").
+        A role without a source comes from an older API and is kept.
+        """
+        own, others = [], []
+        for role in roles:
+            source = role.get("source")
+            (own if source in (None, "Organization") else others).append(role)
+        if others:
+            names = ", ".join(sorted(f"{r.get('name')} ({r.get('source')})" for r in others))
+            self.note_not_managed(
+                f"{len(others)} organization role(s) are defined by GitHub or the enterprise, "
+                f"not by the organization, so they are not managed: {names}."
+            )
+        return own
+
     def add_import(self, resource_type: str, label_source: str, import_id: str) -> str:
         label = hcl_label(resource_type.removeprefix("github_"), label_source)
         address = f"{resource_type}.{label}"
@@ -235,7 +256,10 @@ class GitHubPlanBuilder:
             ),
             ("actions/organization-variables.json", "github_actions_organization_variable", "name"),
         ):
-            for item in load(filename, []):
+            items = load(filename, [])
+            if rtype == "github_organization_role":
+                items = self._own_organization_roles(items)
+            for item in items:
                 value = str(item[field])
                 self.add_import(rtype, value, value)
         for filename, rtype in (
