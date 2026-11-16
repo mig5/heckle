@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+* The generation report records hydration's measured GitHub API requests per object (`hydration.api_requests_per_object`).
+
 ## 0.1.7
 
 * GitHub: manage only the organization's own roles. GitHub's predefined roles and roles defined by the enterprise are reported as not managed; a predefined role GitHub added with a base role the provider rejects ("moderate") made every plan fail.
